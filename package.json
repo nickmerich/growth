@@ -1,0 +1,12 @@
+{
+  "name": "growth",
+  "version": "1.0.0",
+  "description": "Growth toolkit with marketplace plugin system",
+  "type": "module",
+  "bin": {
+    "growth": "./bin/growth.js"
+  },
+  "scripts": {
+    "start": "node bin/growth.js"
+  }
+}
