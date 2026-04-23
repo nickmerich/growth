@@ -1,8 +1,12 @@
-import { mkdir, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, writeFile, rm, copyFile } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PLUGINS_DIR } from '../utils/paths.js';
 import { fetchText } from '../utils/fetch.js';
 import { load, save } from './config.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const BUNDLED_PLUGINS_DIR = join(__dirname, '..', '..', 'plugins');
 
 export async function install(resolvedPlugin) {
   const config = await load();
@@ -18,15 +22,26 @@ export async function install(resolvedPlugin) {
   const pluginDir = join(PLUGINS_DIR, resolvedPlugin.name);
   await mkdir(pluginDir, { recursive: true });
 
-  // Download entry file from marketplace repo
+  // Download entry file from marketplace repo, fall back to bundled plugins
+  let entryInstalled = false;
   if (resolvedPlugin.entry) {
     const url = `https://raw.githubusercontent.com/${resolvedPlugin.marketplaceOwner}/${resolvedPlugin.marketplaceRepo}/main/${resolvedPlugin.entry}`;
     try {
       const content = await fetchText(url);
       const entryFilename = resolvedPlugin.entry.split('/').pop();
       await writeFile(join(pluginDir, entryFilename), content);
+      entryInstalled = true;
     } catch {
-      // Entry file may not exist yet in remote — that's okay for marketplace registration
+      // Remote not available — try bundled plugin
+    }
+  }
+
+  if (!entryInstalled) {
+    const bundledEntry = join(BUNDLED_PLUGINS_DIR, resolvedPlugin.name, 'index.js');
+    try {
+      await copyFile(bundledEntry, join(pluginDir, 'index.js'));
+    } catch {
+      // No bundled plugin available
     }
   }
 

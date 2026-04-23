@@ -1,10 +1,14 @@
 import { handleMarketplace } from './commands/marketplace.js';
 import { handlePlugin } from './commands/plugin.js';
+import { handleRun } from './commands/run.js';
 
 const HELP = `
 growth - Growth toolkit with marketplace plugins
 
 Usage:
+  growth run <plugin> [skill]            Run a plugin or a specific skill
+  growth run <plugin>                    List available skills in a plugin
+
   growth marketplace add <owner/repo>    Register a plugin marketplace
   growth marketplace remove <owner/repo> Remove a marketplace
   growth marketplace list                List marketplaces and available plugins
@@ -33,6 +37,9 @@ export async function run(argv) {
         break;
       case 'plugin':
         await handlePlugin(subcommand, args);
+        break;
+      case 'run':
+        await handleRun(subcommand, args);
         break;
       default:
         console.error(`Unknown command: ${command}`);
