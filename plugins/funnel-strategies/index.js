@@ -9,6 +9,48 @@ export const skills = [
     name: 'aarrr',
     title: 'AARRR Pirate Metrics',
     summary: 'Acquisition, Activation, Retention, Referral, Revenue',
+    steps: [
+      {
+        label: 'ACQUISITION',
+        guidance: 'How do users find you? Identify channels, cost per visitor, and signup rates.',
+        prompts: [
+          { key: 'channels', question: 'What are your top 3 acquisition channels?' },
+          { key: 'best_channel', question: 'Which channel brings your highest-quality customers?' },
+        ],
+      },
+      {
+        label: 'ACTIVATION',
+        guidance: 'Do they have a great first experience? Track onboarding completion and time to first key action.',
+        prompts: [
+          { key: 'first_experience', question: 'What does a great first experience look like for your customer?' },
+          { key: 'drop_off', question: 'Where do new customers drop off in the first experience?' },
+        ],
+      },
+      {
+        label: 'RETENTION',
+        guidance: 'Do they come back? Track D1/D7/D30 retention, cohort curves, feature adoption.',
+        prompts: [
+          { key: 'repeat_trigger', question: 'What brings customers back for repeat business?' },
+          { key: 'retention_metric', question: 'How do you measure retention today? (repeat rate, frequency, etc.):' },
+        ],
+      },
+      {
+        label: 'REFERRAL',
+        guidance: 'Do they tell others? Track viral coefficient, NPS, referral participation.',
+        prompts: [
+          { key: 'referral_method', question: 'How do customers currently refer others to you?' },
+          { key: 'referral_incentive', question: 'What incentive could you offer for referrals?' },
+        ],
+      },
+      {
+        label: 'REVENUE',
+        guidance: 'Can you monetize? Track MRR/ARR, ARPU, LTV, LTV:CAC ratio.',
+        prompts: [
+          { key: 'avg_revenue', question: 'What is your average revenue per customer?' },
+          { key: 'revenue_growth', question: 'What is your best opportunity to grow revenue per customer?' },
+        ],
+      },
+    ],
     content: `
 AARRR PIRATE METRICS
 =====================
@@ -84,6 +126,40 @@ The startup funnel framework by Dave McClure:
     name: 'conversion',
     title: 'Conversion Optimization Playbook',
     summary: 'Systematic approach to improving conversion at every funnel stage',
+    steps: [
+      {
+        label: 'MAP YOUR FUNNEL',
+        guidance: 'Define each stage of your funnel and the conversion rate at each transition.',
+        prompts: [
+          { key: 'funnel_stages', question: 'List your funnel stages (e.g., Visitor → Lead → Customer):' },
+          { key: 'biggest_drop', question: 'Where is the biggest conversion drop-off?' },
+        ],
+      },
+      {
+        label: 'DIAGNOSE THE DROP-OFF',
+        guidance: 'Use quantitative (analytics, heatmaps) and qualitative (interviews, surveys) data.',
+        prompts: [
+          { key: 'diagnosis', question: 'Why do you think people drop off at that stage?' },
+          { key: 'data_source', question: 'What data or feedback supports this diagnosis?' },
+        ],
+      },
+      {
+        label: 'HYPOTHESIS',
+        guidance: 'Template: "If we [change], then [metric] will [improve] because [reason]"',
+        prompts: [
+          { key: 'hypothesis', question: 'Write your optimization hypothesis using the template above:' },
+          { key: 'ice_score', question: 'Score it: Impact (1-10), Confidence (1-10), Ease (1-10):' },
+        ],
+      },
+      {
+        label: 'TACTICS',
+        guidance: 'Choose specific tactics to test: landing page changes, signup flow, email sequence, pricing.',
+        prompts: [
+          { key: 'tactic', question: 'What specific change will you test first?' },
+          { key: 'success_metric', question: 'How will you measure success? (metric and target):' },
+        ],
+      },
+    ],
     content: `
 CONVERSION OPTIMIZATION PLAYBOOK
 ==================================
@@ -151,6 +227,32 @@ STEP 5: MEASURE AND ITERATE
     name: 'flywheel',
     title: 'Growth Flywheel Design',
     summary: 'Build self-reinforcing growth loops that compound over time',
+    steps: [
+      {
+        label: 'IDENTIFY YOUR CORE LOOP',
+        guidance: 'What single action, when repeated, drives your growth? Input → Action → Output → feeds back.',
+        prompts: [
+          { key: 'core_loop', question: 'Describe your core growth loop in one sentence:' },
+          { key: 'flywheel_type', question: 'Which pattern fits? (content / product-led / marketplace / data):' },
+        ],
+      },
+      {
+        label: 'MAP FRICTION POINTS',
+        guidance: 'At each step of your loop, what slows it down?',
+        prompts: [
+          { key: 'highest_friction', question: 'Where is the highest friction in your loop?' },
+          { key: 'friction_fix', question: 'What would reduce that friction?' },
+        ],
+      },
+      {
+        label: 'ADD FORCE',
+        guidance: 'Where can you add energy to spin the flywheel faster?',
+        prompts: [
+          { key: 'force_point', question: 'Where is the highest-leverage point to add force?' },
+          { key: 'cycle_time', question: 'How long does one full revolution take today? How could you shorten it?' },
+        ],
+      },
+    ],
     content: `
 GROWTH FLYWHEEL DESIGN
 =======================
@@ -204,17 +306,18 @@ ANTI-PATTERNS:
 ];
 
 export async function run(args) {
-  if (args.length === 0) {
+  const skillName = args[0]?.toLowerCase();
+
+  if (!skillName) {
     console.log(`\n${meta.name} — ${meta.description}\n`);
     console.log('Available skills:');
     for (const skill of skills) {
       console.log(`  ${skill.name.padEnd(16)} ${skill.summary}`);
     }
-    console.log(`\nRun: growth run ${meta.name} <skill-name>`);
+    console.log(`\nRun: growth run ${meta.name} <skill-name> [--interactive]`);
     return;
   }
 
-  const skillName = args[0].toLowerCase();
   const skill = skills.find((s) => s.name === skillName);
   if (!skill) {
     console.error(`Unknown skill: ${skillName}`);

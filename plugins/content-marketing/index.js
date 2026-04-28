@@ -9,6 +9,33 @@ export const skills = [
     name: 'calendar',
     title: 'Content Calendar Framework',
     summary: 'Plan and schedule content across channels systematically',
+    steps: [
+      {
+        label: 'CONTENT PILLARS',
+        guidance: 'Define 3-5 core topics that map to the problems you solve. Every piece of content must fit under a pillar.',
+        prompts: [
+          { key: 'pillar_1', question: 'Content Pillar 1 (core topic area):' },
+          { key: 'pillar_2', question: 'Content Pillar 2 (core topic area):' },
+          { key: 'pillar_3', question: 'Content Pillar 3 (core topic area):' },
+        ],
+      },
+      {
+        label: 'FORMATS & CADENCE',
+        guidance: 'Choose which content formats you will produce and how often.',
+        prompts: [
+          { key: 'primary_format', question: 'What is your primary content format? (blog, video, social, newsletter, etc.):' },
+          { key: 'cadence', question: 'How often will you publish? (e.g., 2 blogs/month, 3 social posts/week):' },
+        ],
+      },
+      {
+        label: 'REPURPOSING CHAIN',
+        guidance: 'One big piece of content = 8-12 smaller pieces. Plan the chain.',
+        prompts: [
+          { key: 'hero_content', question: 'Describe your next "hero" piece of content (the big one you will repurpose):' },
+          { key: 'repurpose_plan', question: 'How will you repurpose it? (e.g., blog → social thread → email → video clip):' },
+        ],
+      },
+    ],
     content: `
 CONTENT CALENDAR FRAMEWORK
 ============================
@@ -61,6 +88,38 @@ STEP 5: MONTHLY REVIEW
     name: 'distribution',
     title: 'Content Distribution Playbook',
     summary: 'Maximize reach for every piece of content you create',
+    steps: [
+      {
+        label: 'OWNED CHANNELS',
+        guidance: 'Channels you control: website, email list, social profiles, community.',
+        prompts: [
+          { key: 'owned_channels', question: 'Which owned channels will you use? (website, email, social, etc.):' },
+          { key: 'email_list_size', question: 'How large is your email list or primary audience?' },
+        ],
+      },
+      {
+        label: 'EARNED CHANNELS',
+        guidance: 'Channels where others amplify you: shares, press, guest posts, SEO.',
+        prompts: [
+          { key: 'earned_strategy', question: 'How will you earn amplification? (guest posts, partnerships, PR, etc.):' },
+        ],
+      },
+      {
+        label: 'PAID CHANNELS',
+        guidance: 'Channels you pay for: social ads, search ads, sponsorships, influencers.',
+        prompts: [
+          { key: 'paid_budget', question: 'What is your monthly paid distribution budget?' },
+          { key: 'paid_channels', question: 'Which paid channels will you test? (social ads, search, sponsorships):' },
+        ],
+      },
+      {
+        label: 'DISTRIBUTION CHECKLIST',
+        guidance: 'For every piece of content, define the distribution steps.',
+        prompts: [
+          { key: 'checklist', question: 'List your distribution steps for each content piece (post, email, share, repurpose):' },
+        ],
+      },
+    ],
     content: `
 CONTENT DISTRIBUTION PLAYBOOK
 ===============================
@@ -121,6 +180,32 @@ AMPLIFICATION TACTICS:
     name: 'seo',
     title: 'SEO Content Strategy',
     summary: 'Rank for the keywords your customers search for',
+    steps: [
+      {
+        label: 'KEYWORD RESEARCH',
+        guidance: 'What would your customer search for? Categorize by intent: informational, comparison, transactional.',
+        prompts: [
+          { key: 'seed_keywords', question: 'List 5 seed keywords your customers search for:' },
+          { key: 'high_intent', question: 'Which keyword has the highest purchase intent?' },
+        ],
+      },
+      {
+        label: 'CONTENT PLAN',
+        guidance: 'Map content types to keyword intent: how-tos for informational, comparisons for middle-funnel, landing pages for transactional.',
+        prompts: [
+          { key: 'first_article', question: 'What will your first SEO article target? (topic + keyword):' },
+          { key: 'content_type', question: 'What format? (how-to guide, comparison, listicle, landing page):' },
+        ],
+      },
+      {
+        label: 'ON-PAGE OPTIMIZATION',
+        guidance: 'Optimize title, meta description, headers, internal links, and images.',
+        prompts: [
+          { key: 'title_tag', question: 'Write the title tag for your first article (under 60 chars, keyword front-loaded):' },
+          { key: 'meta_description', question: 'Write the meta description (under 160 chars, compelling):' },
+        ],
+      },
+    ],
     content: `
 SEO CONTENT STRATEGY
 =====================
@@ -176,17 +261,18 @@ LINK BUILDING (the hard part):
 ];
 
 export async function run(args) {
-  if (args.length === 0) {
+  const skillName = args[0]?.toLowerCase();
+
+  if (!skillName) {
     console.log(`\n${meta.name} — ${meta.description}\n`);
     console.log('Available skills:');
     for (const skill of skills) {
       console.log(`  ${skill.name.padEnd(16)} ${skill.summary}`);
     }
-    console.log(`\nRun: growth run ${meta.name} <skill-name>`);
+    console.log(`\nRun: growth run ${meta.name} <skill-name> [--interactive]`);
     return;
   }
 
-  const skillName = args[0].toLowerCase();
   const skill = skills.find((s) => s.name === skillName);
   if (!skill) {
     console.error(`Unknown skill: ${skillName}`);

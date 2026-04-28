@@ -9,6 +9,34 @@ export const skills = [
     name: 'icp',
     title: 'Ideal Customer Profile (ICP)',
     summary: 'Define your best-fit customer for focused go-to-market',
+    steps: [
+      {
+        label: 'CUSTOMER CHARACTERISTICS',
+        guidance: 'Describe the company or person who gets the most value from your product.',
+        prompts: [
+          { key: 'industry', question: 'What industry or vertical do your best customers come from?' },
+          { key: 'size', question: 'What is the typical company size or customer demographic?' },
+          { key: 'geography', question: 'What geography do you serve?' },
+        ],
+      },
+      {
+        label: 'BUYING CHARACTERISTICS',
+        guidance: 'How do these customers buy? Budget, decision-maker, triggers.',
+        prompts: [
+          { key: 'decision_maker', question: 'Who is the decision-maker? (title/role):' },
+          { key: 'buying_trigger', question: 'What triggers them to start looking for a solution?' },
+          { key: 'budget', question: 'What is their typical budget range?' },
+        ],
+      },
+      {
+        label: 'SUCCESS CHARACTERISTICS',
+        guidance: 'What makes a customer successful and likely to stay long-term?',
+        prompts: [
+          { key: 'use_case', question: 'What is the primary use case for your best customers?' },
+          { key: 'success_indicator', question: 'How do you know a customer is successful? (metric or behavior):' },
+        ],
+      },
+    ],
     content: `
 IDEAL CUSTOMER PROFILE (ICP)
 =============================
@@ -65,6 +93,48 @@ HOW TO BUILD YOUR ICP:
     name: 'personas',
     title: 'Buyer Personas',
     summary: 'Create detailed profiles of your target buyers and users',
+    steps: [
+      {
+        label: 'PERSONA IDENTITY',
+        guidance: 'Give your persona a name and role. Make them feel real.',
+        prompts: [
+          { key: 'name_role', question: 'Give your persona a name and title (e.g., "Homeowner Hannah"):' },
+          { key: 'demographics', question: 'Describe their demographics (age, location, income, family):' },
+        ],
+      },
+      {
+        label: 'GOALS & MOTIVATIONS',
+        guidance: 'What does this persona want to achieve? What does success look like for them?',
+        prompts: [
+          { key: 'primary_goal', question: 'What is their primary goal when seeking your type of service?' },
+          { key: 'success_looks_like', question: 'What does success look like for them?' },
+        ],
+      },
+      {
+        label: 'CHALLENGES & PAIN POINTS',
+        guidance: 'What frustrates them? What keeps them up at night?',
+        prompts: [
+          { key: 'biggest_frustration', question: 'What is their biggest frustration with current options?' },
+          { key: 'fear', question: 'What are they afraid of when making this type of purchase?' },
+        ],
+      },
+      {
+        label: 'BUYING BEHAVIOR',
+        guidance: 'How do they research, evaluate, and decide?',
+        prompts: [
+          { key: 'research_method', question: 'How do they research solutions? (Google, referrals, social, etc.):' },
+          { key: 'decision_factors', question: 'What are the top 3 factors in their decision?' },
+        ],
+      },
+      {
+        label: 'MESSAGING',
+        guidance: 'What message resonates with this persona?',
+        prompts: [
+          { key: 'key_message', question: 'Write the one message that would resonate most with this persona:' },
+          { key: 'proof_needed', question: 'What proof do they need to trust you? (reviews, certifications, examples):' },
+        ],
+      },
+    ],
     content: `
 BUYER PERSONAS
 ===============
@@ -125,6 +195,33 @@ TIPS:
     name: 'segmentation',
     title: 'Market Segmentation Matrix',
     summary: 'Divide your market into actionable segments for targeted campaigns',
+    steps: [
+      {
+        label: 'DEFINE SEGMENTS',
+        guidance: 'Identify 2-4 distinct customer segments using behavioral, firmographic, or needs-based criteria.',
+        prompts: [
+          { key: 'segment_1', question: 'Describe Segment 1 (name and key characteristics):' },
+          { key: 'segment_2', question: 'Describe Segment 2 (name and key characteristics):' },
+          { key: 'segment_3', question: 'Describe Segment 3 (name and key characteristics, or "skip"):' },
+        ],
+      },
+      {
+        label: 'EVALUATE SEGMENTS',
+        guidance: 'Score each segment on: size, growth, reachability, willingness to pay, fit, competition.',
+        prompts: [
+          { key: 'best_segment', question: 'Which segment scores highest overall and why?' },
+          { key: 'reachability', question: 'How will you reach this segment? (channels, communities, events):' },
+        ],
+      },
+      {
+        label: 'ACTIVATE',
+        guidance: 'For your priority segment, customize value proposition, channels, and messaging.',
+        prompts: [
+          { key: 'value_prop', question: 'Write the value proposition tailored to your priority segment:' },
+          { key: 'content_plan', question: 'What content or campaign will you create specifically for this segment?' },
+        ],
+      },
+    ],
     content: `
 MARKET SEGMENTATION MATRIX
 ============================
@@ -182,17 +279,18 @@ ACTIVATION:
 ];
 
 export async function run(args) {
-  if (args.length === 0) {
+  const skillName = args[0]?.toLowerCase();
+
+  if (!skillName) {
     console.log(`\n${meta.name} — ${meta.description}\n`);
     console.log('Available skills:');
     for (const skill of skills) {
       console.log(`  ${skill.name.padEnd(16)} ${skill.summary}`);
     }
-    console.log(`\nRun: growth run ${meta.name} <skill-name>`);
+    console.log(`\nRun: growth run ${meta.name} <skill-name> [--interactive]`);
     return;
   }
 
-  const skillName = args[0].toLowerCase();
   const skill = skills.find((s) => s.name === skillName);
   if (!skill) {
     console.error(`Unknown skill: ${skillName}`);

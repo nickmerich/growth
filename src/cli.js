@@ -6,7 +6,8 @@ const HELP = `
 growth - Growth toolkit with marketplace plugins
 
 Usage:
-  growth run <plugin> [skill]            Run a plugin or a specific skill
+  growth run <plugin> [skill]             Run a plugin or a specific skill
+  growth run <plugin> <skill> -i         Interactive walkthrough with prompts
   growth run <plugin>                    List available skills in a plugin
 
   growth marketplace add <owner/repo>    Register a plugin marketplace

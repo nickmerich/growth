@@ -9,6 +9,42 @@ export const skills = [
     name: 'kpis',
     title: 'Marketing KPI Dashboard',
     summary: 'Essential metrics every growth team should track',
+    steps: [
+      {
+        label: 'ACQUISITION METRICS',
+        guidance: 'Define the metrics that measure how you attract new customers.',
+        prompts: [
+          { key: 'cac', question: 'What is your current Customer Acquisition Cost (CAC)?' },
+          { key: 'top_channel', question: 'Which channel has the lowest CAC?' },
+          { key: 'lead_rate', question: 'What is your visitor → lead conversion rate?' },
+        ],
+      },
+      {
+        label: 'ENGAGEMENT METRICS',
+        guidance: 'Define the metrics that measure how engaged your customers are.',
+        prompts: [
+          { key: 'activation_rate', question: 'What % of new customers complete their first key action?' },
+          { key: 'engagement_metric', question: 'What is your primary engagement metric? (repeat visits, usage frequency, etc.):' },
+        ],
+      },
+      {
+        label: 'RETENTION METRICS',
+        guidance: 'Define the metrics that measure how well you keep customers.',
+        prompts: [
+          { key: 'churn_rate', question: 'What is your monthly churn rate?' },
+          { key: 'nps', question: 'What is your NPS score (or best estimate)?' },
+        ],
+      },
+      {
+        label: 'REVENUE METRICS',
+        guidance: 'Define the metrics that measure your financial health.',
+        prompts: [
+          { key: 'revenue', question: 'What is your current monthly revenue (or ARR)?' },
+          { key: 'arpu', question: 'What is your average revenue per customer?' },
+          { key: 'ltv_cac', question: 'What is your LTV:CAC ratio? (target: 3:1+):' },
+        ],
+      },
+    ],
     content: `
 MARKETING KPI DASHBOARD
 =========================
@@ -69,6 +105,33 @@ REVENUE METRICS
     name: 'cohort',
     title: 'Cohort Analysis Guide',
     summary: 'Track how user behavior changes over time by signup group',
+    steps: [
+      {
+        label: 'DEFINE YOUR COHORT',
+        guidance: 'Choose how to group users: by signup date (acquisition cohort) or by behavior (behavioral cohort).',
+        prompts: [
+          { key: 'cohort_type', question: 'What type of cohort? (acquisition by signup month, or behavioral by action taken):' },
+          { key: 'metric', question: 'What metric will you track for each cohort? (retention, revenue, feature use):' },
+        ],
+      },
+      {
+        label: 'BUILD THE TABLE',
+        guidance: 'For the last 3-6 months, track your metric at Month 0, Month 1, Month 2, etc.',
+        prompts: [
+          { key: 'recent_cohort', question: 'For your most recent cohort, what was the Month 0 → Month 1 retention/metric?:' },
+          { key: 'trend', question: 'Are newer cohorts performing better or worse than older ones?' },
+        ],
+      },
+      {
+        label: 'IDENTIFY LEVERAGE POINTS',
+        guidance: 'Find the biggest drop-off and the behaviors that predict retention.',
+        prompts: [
+          { key: 'biggest_drop', question: 'Where is the biggest single-period drop? (e.g., Month 0 → Month 1):' },
+          { key: 'retained_behavior', question: 'What do retained users do that churned users don\'t?' },
+          { key: 'intervention', question: 'What intervention will you design to move more users toward the retained behavior?' },
+        ],
+      },
+    ],
     content: `
 COHORT ANALYSIS GUIDE
 ======================
@@ -122,6 +185,33 @@ ACTIONABLE STEPS:
     name: 'attribution',
     title: 'Marketing Attribution Models',
     summary: 'Understand which channels and touchpoints drive conversions',
+    steps: [
+      {
+        label: 'CHOOSE YOUR MODEL',
+        guidance: 'Select an attribution model based on your stage: first-touch + last-touch (early), U-shaped (growth), data-driven (scale).',
+        prompts: [
+          { key: 'current_model', question: 'What attribution model do you use today? (or "none"):' },
+          { key: 'recommended_model', question: 'Based on your stage, which model will you adopt? (first-touch, last-touch, U-shaped, etc.):' },
+        ],
+      },
+      {
+        label: 'TRACKING SETUP',
+        guidance: 'Ensure UTM parameters, CRM tracking, and platform connections are in place.',
+        prompts: [
+          { key: 'utm_status', question: 'Do you use UTM parameters on all campaign links? (yes/no/partially):' },
+          { key: 'crm_connection', question: 'Is your marketing platform connected to your CRM? (yes/no, which tools?):' },
+        ],
+      },
+      {
+        label: 'CHANNEL PERFORMANCE',
+        guidance: 'List your channels and evaluate performance under your chosen attribution model.',
+        prompts: [
+          { key: 'top_channel', question: 'Under your chosen model, which channel drives the most conversions?' },
+          { key: 'undervalued_channel', question: 'Which channel might be undervalued by simpler models?' },
+          { key: 'action_item', question: 'What is one budget or strategy change you will make based on this analysis?' },
+        ],
+      },
+    ],
     content: `
 MARKETING ATTRIBUTION MODELS
 ==============================
@@ -190,17 +280,18 @@ IMPLEMENTATION CHECKLIST:
 ];
 
 export async function run(args) {
-  if (args.length === 0) {
+  const skillName = args[0]?.toLowerCase();
+
+  if (!skillName) {
     console.log(`\n${meta.name} — ${meta.description}\n`);
     console.log('Available skills:');
     for (const skill of skills) {
       console.log(`  ${skill.name.padEnd(16)} ${skill.summary}`);
     }
-    console.log(`\nRun: growth run ${meta.name} <skill-name>`);
+    console.log(`\nRun: growth run ${meta.name} <skill-name> [--interactive]`);
     return;
   }
 
-  const skillName = args[0].toLowerCase();
   const skill = skills.find((s) => s.name === skillName);
   if (!skill) {
     console.error(`Unknown skill: ${skillName}`);
