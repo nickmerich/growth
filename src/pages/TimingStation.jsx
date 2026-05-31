@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Flag, MonitorPlay, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { Logo } from '../components/Brand.jsx';

@@ -113,7 +113,6 @@ export default function Result() {
             rank={rank}
             metricStr={metricStr}
             paceStr={paceStr}
-            timeStr={timeStr}
           />
         </div>
       </div>
@@ -152,7 +151,7 @@ const VARIANT_TITLE = {
 
 // 9:16 share card. Inline styles where html2canvas needs deterministic output.
 const ProofCard = forwardRef(function ProofCard(
-  { variant, result, event, rank, metricStr, paceStr, timeStr },
+  { variant, result, event, rank, metricStr, paceStr },
   ref
 ) {
   const accent = '#8CC8F0';

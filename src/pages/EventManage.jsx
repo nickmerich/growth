@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Copy, Check, Timer, MonitorPlay, Trash2, UserPlus, Flag, Pencil, CheckCircle2 } from 'lucide-react';
 import { Shell, StatusBadge, Tagline } from '../components/Brand.jsx';
 import { QRCode } from '../components/QRCode.jsx';
@@ -30,7 +30,6 @@ const ROSTER_STATUS = {
 
 export default function EventManage() {
   const { slug } = useParams();
-  const navigate = useNavigate();
   const event = useStore(() => getEventBySlug(slug), [slug]);
   const roster = useStore(() => (event ? getEventRoster(event.id) : []), [slug, event?.id]);
   const scoreboard = useStore(() => (event ? getScoreboard(event.id) : []), [slug, event?.id]);
