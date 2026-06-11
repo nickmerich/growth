@@ -14,12 +14,7 @@ import {
   finishEvent,
   markDNF,
 } from '../lib/storage.js';
-import { formatEventDate, formatTime, formatPace } from '../lib/format.js';
-
-function originUrl(path) {
-  if (typeof window === 'undefined') return path;
-  return `${window.location.origin}${path}`;
-}
+import { formatEventDate, formatTime, formatPace, formatMetric, originUrl } from '../lib/format.js';
 
 const ROSTER_STATUS = {
   registered: 'text-gryt-mute',
@@ -192,17 +187,7 @@ export default function EventManage() {
               </div>
               <div className="flex items-center gap-3">
                 <div className="text-right">
-                  <div className="font-mono text-sm text-white">
-                    {r.final_time_seconds != null
-                      ? formatTime(r.final_time_seconds)
-                      : r.rounds != null
-                        ? `${r.rounds} rds`
-                        : r.reps != null
-                          ? `${r.reps} reps`
-                          : r.score != null
-                            ? `${r.score} pts`
-                            : '—'}
-                  </div>
+                  <div className="font-mono text-sm text-white">{formatMetric(r, { units: true })}</div>
                   {r.distance_meters && r.final_time_seconds ? (
                     <div className="text-[11px] text-gryt-mute">{formatPace(r.final_time_seconds, r.distance_meters)}</div>
                   ) : null}

@@ -73,3 +73,59 @@ export function formatEventDate(date, time) {
     return `${date} ${time || ''}`.trim();
   }
 }
+
+// Build an absolute URL from an app-relative path (share links, QR targets).
+export function originUrl(path) {
+  if (typeof window === 'undefined') return path;
+  return `${window.location.origin}${path}`;
+}
+
+// The primary metric string for a result, driven by whichever value is set.
+// `units` appends a unit suffix (rds/reps/pts/km); `upper` uppercases it.
+// Bare mode (no units) is used by the big scoreboard column.
+export function formatMetric(result, { units = false, upper = false } = {}) {
+  if (!result) return '—';
+  if (result.final_time_seconds != null) return formatTime(result.final_time_seconds);
+  let value;
+  let unit;
+  if (result.rounds != null) {
+    value = result.rounds;
+    unit = 'rds';
+  } else if (result.reps != null) {
+    value = result.reps;
+    unit = 'reps';
+  } else if (result.distance_meters != null) {
+    value = (result.distance_meters / 1000).toFixed(2);
+    unit = 'km';
+  } else if (result.score != null) {
+    value = result.score;
+    unit = 'pts';
+  } else {
+    return '—';
+  }
+  if (!units) return unit === 'km' ? `${value}k` : `${value}`;
+  return `${value} ${upper ? unit.toUpperCase() : unit}`;
+}
+
+// Short column/header label for a scoring method (e.g. "Most Rounds" -> "Rounds").
+export function scoringMetricLabel(method) {
+  if (method === 'Fastest Time' || !method) return 'Time';
+  return method.replace('Most ', '').replace('Longest ', '');
+}
+
+// Input field label for manual result entry, keyed off the scoring method.
+export function metricFieldLabel(method) {
+  switch (method) {
+    case 'Most Reps':
+      return 'Reps';
+    case 'Most Rounds':
+      return 'Rounds';
+    case 'Longest Distance':
+      return 'Distance (m)';
+    case 'Custom Points':
+      return 'Points';
+    case 'Fastest Time':
+    default:
+      return 'Time (MM:SS)';
+  }
+}

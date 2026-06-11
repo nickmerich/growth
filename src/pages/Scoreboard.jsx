@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Maximize2 } from 'lucide-react';
 import { Tagline } from '../components/Brand.jsx';
-import { useStore, useWakeLock, useRaceClock } from '../lib/hooks.js';
+import { MasterClock } from '../components/RaceClock.jsx';
+import { useStore, useWakeLock } from '../lib/hooks.js';
 import { getEventBySlug, getScoreboard } from '../lib/storage.js';
-import { formatClock, formatTime, formatPace } from '../lib/format.js';
+import { formatTime, formatPace, formatMetric, scoringMetricLabel } from '../lib/format.js';
 
 const MEDAL = ['', 'text-yellow-300', 'text-slate-300', 'text-amber-600'];
 const MEDAL_BG = ['', 'bg-yellow-300/10', 'bg-slate-300/10', 'bg-amber-600/10'];
@@ -13,7 +14,6 @@ export default function Scoreboard() {
   const { slug } = useParams();
   const event = useStore(() => getEventBySlug(slug), [slug]);
   const results = useStore(() => (event ? getScoreboard(event.id) : []), [slug, event?.id]);
-  const elapsed = useRaceClock(event?.status === 'live' ? event?.started_at : null);
   useWakeLock(true);
 
   const [sortKey, setSortKey] = useState('rank'); // rank | time | name
@@ -85,17 +85,7 @@ export default function Scoreboard() {
     return <div className="flex min-h-screen items-center justify-center text-gryt-mute">Event not found.</div>;
   }
 
-  const isTime = event.scoring_method === 'Fastest Time';
-  const metricLabel = isTime ? 'Time' : event.scoring_method.replace('Most ', '').replace('Longest ', '');
-
-  function metric(r) {
-    if (r.final_time_seconds != null) return formatTime(r.final_time_seconds);
-    if (r.rounds != null) return `${r.rounds}`;
-    if (r.reps != null) return `${r.reps}`;
-    if (r.distance_meters != null) return `${(r.distance_meters / 1000).toFixed(2)}k`;
-    if (r.score != null) return `${r.score}`;
-    return '—';
-  }
+  const metricLabel = scoringMetricLabel(event.scoring_method);
 
   return (
     <div className="gryt-noise relative flex h-screen flex-col overflow-hidden bg-gryt-black">
@@ -111,9 +101,16 @@ export default function Scoreboard() {
           <div className="text-[10px] uppercase tracking-[0.4em] text-gryt-mute">
             {event.status === 'live' ? 'Race Clock' : event.status === 'finished' ? 'Final' : 'Standby'}
           </div>
-          <div className={`gryt-heading font-mono text-4xl text-white tabular sm:text-6xl ${event.status === 'live' ? 'animate-pulseClock' : ''}`}>
-            {event.status === 'live' ? formatClock(elapsed) : formatTime(rows[0]?.final_time_seconds ?? 0)}
-          </div>
+          {event.status === 'live' ? (
+            <MasterClock
+              startedAt={event.started_at}
+              className="gryt-heading animate-pulseClock font-mono text-4xl text-white tabular sm:text-6xl"
+            />
+          ) : (
+            <div className="gryt-heading font-mono text-4xl text-white tabular sm:text-6xl">
+              {formatTime(rows[0]?.final_time_seconds ?? 0)}
+            </div>
+          )}
         </div>
       </header>
 
@@ -166,7 +163,7 @@ export default function Scoreboard() {
             <div className="hidden text-right font-mono text-lg text-gryt-mute sm:block">
               {r.final_time_seconds && r.distance_meters ? formatPace(r.final_time_seconds, r.distance_meters) : '—'}
             </div>
-            <div className="gryt-heading text-right font-mono text-3xl text-white sm:text-4xl">{metric(r)}</div>
+            <div className="gryt-heading text-right font-mono text-3xl text-white sm:text-4xl">{formatMetric(r)}</div>
           </div>
         ))}
       </div>

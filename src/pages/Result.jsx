@@ -5,7 +5,7 @@ import { Download, Copy, Check, MonitorPlay, ArrowLeft } from 'lucide-react';
 import { Shell } from '../components/Brand.jsx';
 import { useStore, useCopy } from '../lib/hooks.js';
 import { getResultById, getEventById, getScoreboard } from '../lib/storage.js';
-import { formatTime, formatPace, formatEventDate } from '../lib/format.js';
+import { formatTime, formatPace, formatEventDate, formatMetric } from '../lib/format.js';
 
 const VARIANTS = [
   ['FINISHER', 'finisher'],
@@ -41,11 +41,7 @@ export default function Result() {
   const paceStr = result.final_time_seconds && result.distance_meters
     ? formatPace(result.final_time_seconds, result.distance_meters)
     : null;
-  const metricStr =
-    timeStr ||
-    (result.rounds != null ? `${result.rounds} RDS` : null) ||
-    (result.reps != null ? `${result.reps} REPS` : null) ||
-    (result.score != null ? `${result.score} PTS` : '—');
+  const metricStr = formatMetric(result, { units: true, upper: true });
 
   const shareText = `I showed up and did the work.\n\n${result.athlete_name} — ${event.name}\n${timeStr ? `Time: ${timeStr}` : `Result: ${metricStr}`}${rank ? `\nRank: #${rank}` : ''}\n\nDO HARD THINGS TOGETHER.`;
 

@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Flag, MonitorPlay, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { Logo } from '../components/Brand.jsx';
-import { useStore, useWakeLock, useRaceClock } from '../lib/hooks.js';
+import { MasterClock } from '../components/RaceClock.jsx';
+import { useStore, useWakeLock } from '../lib/hooks.js';
 import { beep, buzzer, click, vibrate, primeAudio } from '../lib/sound.js';
 import {
   getEventBySlug,
@@ -17,7 +18,13 @@ import {
   saveResult,
   markDNF,
 } from '../lib/storage.js';
-import { formatClock, formatTime, parseTimeToSeconds, parseDistanceMeters } from '../lib/format.js';
+import {
+  formatClock,
+  formatMetric,
+  metricFieldLabel,
+  parseTimeToSeconds,
+  parseDistanceMeters,
+} from '../lib/format.js';
 
 export default function TimingStation() {
   const { slug } = useParams();
@@ -26,7 +33,6 @@ export default function TimingStation() {
   const queue = useStore(() => (event ? getFinishQueue(event.id) : []), [slug, event?.id]);
   const scoreboard = useStore(() => (event ? getScoreboard(event.id) : []), [slug, event?.id]);
 
-  const elapsed = useRaceClock(event?.started_at || null);
   useWakeLock(true);
 
   const [countdown, setCountdown] = useState(null);
@@ -133,9 +139,11 @@ export default function TimingStation() {
       {/* Master clock — ~30% */}
       <div className="flex min-h-[26vh] flex-col items-center justify-center border-b border-gryt-line bg-black/40">
         <div className="text-[11px] uppercase tracking-[0.4em] text-gryt-mute">Master Race Clock</div>
-        <div className={`gryt-heading font-mono text-[18vw] leading-none text-white tabular sm:text-[14vw] ${isLive ? '' : 'text-gryt-mute'}`}>
-          {formatClock(isLive ? elapsed : 0)}
-        </div>
+        <MasterClock
+          startedAt={event.started_at}
+          active={isLive}
+          className={`gryt-heading font-mono text-[18vw] leading-none text-white tabular sm:text-[14vw] ${isLive ? '' : 'text-gryt-mute'}`}
+        />
         {isLive && <div className="text-xs text-gryt-light">{unassigned.length} unassigned · {scoreboard.filter((r) => r.rank).length} ranked</div>}
       </div>
 
@@ -274,7 +282,7 @@ export default function TimingStation() {
                         {r.source === 'self_timed' ? 'self' : r.source === 'manual' ? 'man' : 'dir'}
                       </span>
                       <span className="font-mono text-white">
-                        {r.final_time_seconds != null ? formatTime(r.final_time_seconds) : r.rounds != null ? `${r.rounds} rds` : '—'}
+                        {formatMetric(r, { units: true })}
                       </span>
                     </span>
                   </div>
@@ -295,15 +303,7 @@ function ManualEntry({ event, distanceMeters, onDone }) {
   const [value, setValue] = useState('');
 
   const isTime = event.scoring_method === 'Fastest Time';
-  const fieldLabel = isTime
-    ? 'Time (MM:SS)'
-    : event.scoring_method === 'Most Reps'
-      ? 'Reps'
-      : event.scoring_method === 'Most Rounds'
-        ? 'Rounds'
-        : event.scoring_method === 'Longest Distance'
-          ? 'Distance (m)'
-          : 'Points';
+  const fieldLabel = metricFieldLabel(event.scoring_method);
 
   function submit(e) {
     e.preventDefault();
