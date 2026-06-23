@@ -1,9 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Activity, MonitorPlay, QrCode, Timer, Trophy, Users } from 'lucide-react';
-import { Shell, Tagline } from '../components/Brand.jsx';
-import { useStore } from '../lib/hooks.js';
-import { getEvents } from '../lib/storage.js';
-import { StatusBadge } from '../components/Brand.jsx';
+import { Shell, Tagline, StatusBadge } from '../components/Brand.jsx';
+import { useAsyncStore } from '../lib/hooks.js';
+import { getEvents, subscribeAll } from '../lib/storage.js';
 import { formatEventDate } from '../lib/format.js';
 
 const FEATURES = [
@@ -14,7 +13,8 @@ const FEATURES = [
 ];
 
 export default function Home() {
-  const events = useStore(() => getEvents().filter((e) => e.is_public).slice(0, 4));
+  const { data } = useAsyncStore(() => getEvents(), [], { subscribe: subscribeAll });
+  const events = (data || []).filter((e) => e.is_public).slice(0, 4);
 
   return (
     <Shell>

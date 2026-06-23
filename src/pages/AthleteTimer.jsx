@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Play, Pause, Square, Flag, ArrowLeft } from 'lucide-react';
-import { Logo, Tagline } from '../components/Brand.jsx';
-import { useStore, useWakeLock } from '../lib/hooks.js';
+import { Logo, Tagline, LoadingState } from '../components/Brand.jsx';
+import { useAsyncStore, useWakeLock } from '../lib/hooks.js';
 import { primeAudio } from '../lib/sound.js';
 import { getEventBySlug, getEventRoster, registerAthlete, saveResult } from '../lib/storage.js';
 import { formatClock, parseDistanceMeters } from '../lib/format.js';
@@ -11,17 +11,22 @@ export default function AthleteTimer() {
   const { slug } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const event = useStore(() => getEventBySlug(slug), [slug]);
-  const roster = useStore(() => (event ? getEventRoster(event.id) : []), [slug, event?.id]);
+  const { data: event, loading } = useAsyncStore(() => getEventBySlug(slug), [slug]);
+  const { data: roster } = useAsyncStore(
+    () => (event ? getEventRoster(event.id) : Promise.resolve([])),
+    [event?.id]
+  );
   useWakeLock(true);
 
   const athleteId = params.get('athlete');
-  const athlete = athleteId ? roster.find((a) => a.id === athleteId) : null;
+  const athlete = athleteId ? (roster || []).find((a) => a.id === athleteId) : null;
 
   const [name, setName] = useState('');
   const [running, setRunning] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [laps, setLaps] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const startRef = useRef(0);
   const baseRef = useRef(0);
   const rafRef = useRef(0);
@@ -36,6 +41,9 @@ export default function AthleteTimer() {
     return () => cancelAnimationFrame(rafRef.current);
   }, [running]);
 
+  if (loading && event === undefined) {
+    return <div className="flex min-h-screen items-center justify-center bg-gryt-black"><LoadingState label="Loading event" /></div>;
+  }
   if (!event) {
     return <div className="flex min-h-screen items-center justify-center text-gryt-mute">Event not found.</div>;
   }
@@ -59,27 +67,44 @@ export default function AthleteTimer() {
     setLaps([]);
   }
 
-  function stopAndSave() {
+  async function stopAndSave() {
+    if (saving) return;
     setRunning(false);
+    // Snapshot effort up front so a failed network write never loses the time.
     const finalSeconds = elapsed / 1000;
-    let resolved = athlete;
-    if (!resolved) {
-      if (!name.trim()) return;
-      resolved = registerAthlete(event.id, { name });
+    if (!athlete && !name.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      let resolved = athlete;
+      if (!resolved) {
+        const tokenKey = `igryt.athlete_token.${event.id}`;
+        let token = localStorage.getItem(tokenKey);
+        if (!token) {
+          token = `tok_${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
+          localStorage.setItem(tokenKey, token);
+        }
+        resolved = await registerAthlete(event.id, { name, session_token: token });
+      }
+      const splits = laps.map((l, i) => ({ lap: i + 1, time_seconds: l / 1000 }));
+      const result = await saveResult({
+        event_id: event.id,
+        athlete_id: resolved.id,
+        athlete_name: resolved.name,
+        team: resolved.team,
+        final_time_seconds: finalSeconds,
+        distance_meters: parseDistanceMeters(event.distance_target),
+        splits,
+        source: 'self_timed',
+        status: 'finished',
+      });
+      // Only navigate once the result row is confirmed.
+      navigate(`/result/${result.id}`);
+    } catch (err) {
+      setSaveError(err);
+    } finally {
+      setSaving(false);
     }
-    const splits = laps.map((l, i) => ({ lap: i + 1, time_seconds: l / 1000 }));
-    const result = saveResult({
-      event_id: event.id,
-      athlete_id: resolved.id,
-      athlete_name: resolved.name,
-      team: resolved.team,
-      final_time_seconds: finalSeconds,
-      distance_meters: parseDistanceMeters(event.distance_target),
-      splits,
-      source: 'self_timed',
-      status: 'finished',
-    });
-    navigate(`/result/${result.id}`);
   }
 
   const needsName = !athlete;
@@ -130,18 +155,23 @@ export default function AthleteTimer() {
           </button>
           <button
             onClick={stopAndSave}
-            disabled={elapsed === 0 || (needsName && !name.trim())}
+            disabled={elapsed === 0 || (needsName && !name.trim()) || saving}
             className="flex h-20 w-20 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-300 active:scale-95 disabled:opacity-30"
             title="Stop & save"
           >
             <Square size={24} fill="currentColor" />
           </button>
         </div>
+        {saveError && (
+          <p className="mt-3 text-center text-sm text-red-400">
+            Couldn’t save your result — your time is safe. Tap Save to retry.
+          </p>
+        )}
         <div className="mt-3 flex gap-4 text-xs text-gryt-mute">
-          <button onClick={reset} className="hover:text-white">Reset</button>
+          <button onClick={reset} className="hover:text-white" disabled={saving}>Reset</button>
           {elapsed > 0 && !running && (
-            <button onClick={stopAndSave} disabled={needsName && !name.trim()} className="font-bold text-gryt-light disabled:opacity-40">
-              Save Result →
+            <button onClick={stopAndSave} disabled={(needsName && !name.trim()) || saving} className="font-bold text-gryt-light disabled:opacity-40">
+              {saving ? 'Saving…' : 'Save Result →'}
             </button>
           )}
         </div>
