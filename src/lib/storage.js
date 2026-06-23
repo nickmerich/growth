@@ -57,6 +57,7 @@ export const assignFinisherToAthlete = (...a) => backend.assignFinisherToAthlete
 export const getResults = (...a) => backend.getResults(...a);
 export const getResultById = (...a) => backend.getResultById(...a);
 export const saveResult = (...a) => backend.saveResult(...a);
+export const saveSelfResult = (...a) => backend.saveSelfResult(...a);
 export const updateResult = (...a) => backend.updateResult(...a);
 export const deleteResult = (...a) => backend.deleteResult(...a);
 

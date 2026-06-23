@@ -6,6 +6,7 @@ import {
   getFinishQueue,
   assignFinisherToAthlete,
   saveResult,
+  saveSelfResult,
   getResults,
   getEventRoster,
   clearAll,
@@ -80,6 +81,57 @@ describe('saveResult upsert (one per event+athlete)', () => {
     });
     const roster = await getEventRoster(event.id);
     expect(roster[0].status).toBe('finished');
+  });
+});
+
+describe('saveSelfResult (submit_self_result RPC mirror)', () => {
+  it('find-or-creates an athlete by session token and stamps self_timed', async () => {
+    const event = await seedEvent();
+    const result = await saveSelfResult(event.id, {
+      session_token: 'tok_self',
+      name: 'Robin',
+      final_time_seconds: 310,
+    });
+    expect(result.source).toBe('self_timed');
+    expect(result.final_time_seconds).toBe(310);
+    const roster = await getEventRoster(event.id);
+    expect(roster).toHaveLength(1);
+    expect(roster[0].session_token).toBe('tok_self');
+    expect(roster[0].status).toBe('finished');
+  });
+
+  it('re-save replaces the athlete\'s own result in place (no duplicate)', async () => {
+    const event = await seedEvent();
+    await saveSelfResult(event.id, { session_token: 'tok_self', name: 'Robin', final_time_seconds: 310 });
+    await saveSelfResult(event.id, { session_token: 'tok_self', name: 'Robin', final_time_seconds: 295 });
+    const results = await getResults(event.id);
+    expect(results).toHaveLength(1);
+    expect(results[0].final_time_seconds).toBe(295);
+    expect(await getEventRoster(event.id)).toHaveLength(1);
+  });
+
+  it('claims a pre-registered athlete by id and binds the token', async () => {
+    const event = await seedEvent();
+    const walkup = await registerAthlete(event.id, { name: 'Walk Up' }); // no token
+    const result = await saveSelfResult(event.id, {
+      session_token: 'tok_claim',
+      athlete_id: walkup.id,
+      name: 'Walk Up',
+      final_time_seconds: 400,
+    });
+    expect(result.athlete_id).toBe(walkup.id);
+    const roster = await getEventRoster(event.id);
+    expect(roster).toHaveLength(1);
+    expect(roster[0].session_token).toBe('tok_claim');
+  });
+
+  it('rejects an athlete id from a different event', async () => {
+    const eventA = await seedEvent({ name: 'A' });
+    const eventB = await seedEvent({ name: 'B' });
+    const athleteB = await registerAthlete(eventB.id, { name: 'Other' });
+    await expect(
+      saveSelfResult(eventA.id, { session_token: 'tok_x', athlete_id: athleteB.id, name: 'Other', final_time_seconds: 100 })
+    ).rejects.toThrow();
   });
 });
 

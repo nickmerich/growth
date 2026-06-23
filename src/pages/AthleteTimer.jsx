@@ -4,7 +4,7 @@ import { Play, Pause, Square, Flag, ArrowLeft } from 'lucide-react';
 import { Logo, Tagline, LoadingState } from '../components/Brand.jsx';
 import { useAsyncStore, useWakeLock } from '../lib/hooks.js';
 import { primeAudio } from '../lib/sound.js';
-import { getEventBySlug, getEventRoster, registerAthlete, saveResult } from '../lib/storage.js';
+import { getEventBySlug, getEventRoster, saveSelfResult } from '../lib/storage.js';
 import { formatClock, parseDistanceMeters } from '../lib/format.js';
 
 export default function AthleteTimer() {
@@ -72,31 +72,28 @@ export default function AthleteTimer() {
     setRunning(false);
     // Snapshot effort up front so a failed network write never loses the time.
     const finalSeconds = elapsed / 1000;
-    if (!athlete && !name.trim()) return;
+    const displayName = (athlete?.name || name).trim();
+    if (!displayName) return;
     setSaving(true);
     setSaveError(null);
     try {
-      let resolved = athlete;
-      if (!resolved) {
-        const tokenKey = `igryt.athlete_token.${event.id}`;
-        let token = localStorage.getItem(tokenKey);
-        if (!token) {
-          token = `tok_${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
-          localStorage.setItem(tokenKey, token);
-        }
-        resolved = await registerAthlete(event.id, { name, session_token: token });
+      // A stable per-device token identifies this athlete to the self-result RPC,
+      // so a re-save replaces their own result rather than creating a duplicate.
+      const tokenKey = `igryt.athlete_token.${event.id}`;
+      let token = localStorage.getItem(tokenKey);
+      if (!token) {
+        token = `tok_${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
+        localStorage.setItem(tokenKey, token);
       }
       const splits = laps.map((l, i) => ({ lap: i + 1, time_seconds: l / 1000 }));
-      const result = await saveResult({
-        event_id: event.id,
-        athlete_id: resolved.id,
-        athlete_name: resolved.name,
-        team: resolved.team,
+      const result = await saveSelfResult(event.id, {
+        session_token: token,
+        athlete_id: athlete?.id ?? null,
+        name: displayName,
+        team: athlete?.team,
         final_time_seconds: finalSeconds,
         distance_meters: parseDistanceMeters(event.distance_target),
         splits,
-        source: 'self_timed',
-        status: 'finished',
       });
       // Only navigate once the result row is confirmed.
       navigate(`/result/${result.id}`);

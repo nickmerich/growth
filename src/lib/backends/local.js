@@ -247,6 +247,39 @@ export async function saveResult(data) {
   return result;
 }
 
+// Mirror of the submit_self_result RPC: resolve the athlete by explicit id
+// (claiming it for this device's token) or by session token (find-or-create),
+// then upsert a self-timed result. Keeps anon self-timed re-saves working with
+// identical semantics to the Supabase path.
+export async function saveSelfResult(
+  eventId,
+  { session_token, name, team, final_time_seconds, distance_meters, splits, athlete_id } = {}
+) {
+  let athlete;
+  if (athlete_id) {
+    athlete = read(KEYS.athletes).find((a) => a.id === athlete_id && a.event_id === eventId);
+    if (!athlete) throw new Error('athlete does not belong to event');
+    if (!athlete.session_token && session_token) {
+      athlete = await updateAthlete(athlete.id, { session_token });
+    }
+  } else if (session_token) {
+    athlete = await registerAthlete(eventId, { name, team, session_token });
+  } else {
+    throw new Error('a session token or athlete id is required');
+  }
+  return saveResult({
+    event_id: eventId,
+    athlete_id: athlete.id,
+    athlete_name: athlete.name,
+    team: team ?? athlete.team,
+    final_time_seconds: final_time_seconds ?? null,
+    distance_meters: distance_meters ?? null,
+    splits: splits ?? [],
+    source: 'self_timed',
+    status: 'finished',
+  });
+}
+
 export async function updateResult(id, patch) {
   const next = read(KEYS.results).map((r) =>
     r.id === id ? { ...r, ...patch, updated_at: Date.now() } : r

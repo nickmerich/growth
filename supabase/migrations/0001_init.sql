@@ -62,7 +62,9 @@ create unique index if not exists athletes_event_session_uniq
 create table if not exists public.finishes (
   id                  uuid primary key default gen_random_uuid(),
   event_id            uuid not null references public.events(id) on delete cascade,
-  timestamp_ms        integer not null,
+  -- bigint: elapsed-ms from gun time is small today, but bigint removes any
+  -- 32-bit ceiling for long/absolute timestamps and future-proofs the column.
+  timestamp_ms        bigint not null,
   assigned_athlete_id uuid references public.athletes(id) on delete set null,
   created_by          uuid,
   created_at          timestamptz not null default now(),
@@ -156,6 +158,12 @@ begin
     raise exception 'athlete % does not belong to event %', p_athlete_id, v_finish.event_id;
   end if;
 
+  -- SECURITY DEFINER bypasses RLS, so authorize explicitly: only the event
+  -- owner may assign finishers / write director-timed results.
+  if not public.is_event_owner(v_finish.event_id) then
+    raise exception 'not authorized to assign finishers for event %', v_finish.event_id;
+  end if;
+
   update public.finishes
      set assigned_athlete_id = p_athlete_id
    where id = p_finish_id;
@@ -179,6 +187,113 @@ begin
   return v_result;
 end;
 $$;
+
+-- Lock the RPC down: it must never be callable by anonymous clients. Only
+-- authenticated organizers may invoke it, and the owner check above gates by event.
+revoke all on function public.assign_finisher(uuid, uuid) from public, anon;
+grant execute on function public.assign_finisher(uuid, uuid) to authenticated;
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- submit_self_result RPC
+--
+-- The safe path for anonymous, self-timed athletes. RLS forbids anon clients
+-- from writing results directly (results_insert is owner-only); instead they
+-- call this SECURITY DEFINER function, which:
+--   * only works on public events
+--   * binds the result to an athlete identified by their per-device session
+--     token (find-or-create), or claims a pre-registered roster athlete by id
+--   * always stamps source = 'self_timed' (never director_timed)
+--   * upserts so a re-save replaces the athlete's own result in place,
+--     side-stepping the owner-only UPDATE policy that would block a raw upsert
+-- This is what makes anonymous self-timed re-saves work without opening results
+-- up to forged director-timed rows.
+-- ─────────────────────────────────────────────────────────────────────────
+create or replace function public.submit_self_result(
+  p_event_id           uuid,
+  p_session_token      text,
+  p_name               text,
+  p_team               text,
+  p_final_time_seconds numeric,
+  p_distance_meters     numeric,
+  p_splits             jsonb default '[]'::jsonb,
+  p_athlete_id         uuid default null
+)
+returns public.results
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_event   public.events%rowtype;
+  v_athlete public.athletes%rowtype;
+  v_result  public.results%rowtype;
+  v_name    text := coalesce(nullif(btrim(p_name), ''), 'Athlete');
+  v_team    text := nullif(btrim(p_team), '');
+begin
+  select * into v_event from public.events where id = p_event_id;
+  if not found then
+    raise exception 'event % not found', p_event_id;
+  end if;
+  if v_event.is_public is not true then
+    raise exception 'event % is not public', p_event_id;
+  end if;
+
+  if p_athlete_id is not null then
+    -- Claim a pre-registered (e.g. organizer walk-up) athlete by id.
+    select * into v_athlete from public.athletes
+      where id = p_athlete_id and event_id = p_event_id;
+    if not found then
+      raise exception 'athlete % does not belong to event %', p_athlete_id, p_event_id;
+    end if;
+    if v_athlete.session_token is null and p_session_token is not null then
+      update public.athletes set session_token = p_session_token
+        where id = v_athlete.id
+        returning * into v_athlete;
+    end if;
+  elsif p_session_token is not null then
+    -- Find-or-create the athlete for this device's session token.
+    select * into v_athlete from public.athletes
+      where event_id = p_event_id and session_token = p_session_token;
+    if not found then
+      insert into public.athletes (event_id, session_token, name, team, status)
+      values (p_event_id, p_session_token, v_name, v_team, 'finished')
+      returning * into v_athlete;
+    end if;
+  else
+    raise exception 'a session token or athlete id is required';
+  end if;
+
+  insert into public.results
+    (event_id, athlete_id, athlete_name, team, final_time_seconds,
+     distance_meters, splits, status, source)
+  values
+    (p_event_id, v_athlete.id, v_athlete.name, coalesce(v_team, v_athlete.team),
+     p_final_time_seconds, p_distance_meters, coalesce(p_splits, '[]'::jsonb),
+     'finished', 'self_timed')
+  on conflict (event_id, athlete_id) where athlete_id is not null
+  do update set
+    final_time_seconds = excluded.final_time_seconds,
+    distance_meters    = excluded.distance_meters,
+    splits             = excluded.splits,
+    status             = 'finished',
+    source             = 'self_timed',
+    athlete_name       = excluded.athlete_name,
+    team               = excluded.team
+  returning * into v_result;
+
+  update public.athletes set status = 'finished'
+    where id = v_athlete.id and status <> 'dnf';
+
+  return v_result;
+end;
+$$;
+
+revoke all on function
+  public.submit_self_result(uuid, text, text, text, numeric, numeric, jsonb, uuid)
+  from public;
+grant execute on function
+  public.submit_self_result(uuid, text, text, text, numeric, numeric, jsonb, uuid)
+  to anon, authenticated;
 
 -- ─────────────────────────────────────────────────────────────────────────
 -- Row Level Security
@@ -233,8 +348,13 @@ create policy athletes_select on public.athletes
   for select using (is_event_public(event_id) or is_event_owner(event_id));
 
 drop policy if exists athletes_insert on public.athletes;
+-- Owners may add roster athletes in any state; anonymous self-join is limited to
+-- creating a plain 'registered' athlete (no pre-set 'finished'/'dnf' status).
 create policy athletes_insert on public.athletes
-  for insert with check (is_event_public(event_id) or is_event_owner(event_id));
+  for insert with check (
+    is_event_owner(event_id)
+    or (is_event_public(event_id) and status = 'registered')
+  );
 
 drop policy if exists athletes_update on public.athletes;
 create policy athletes_update on public.athletes
@@ -253,14 +373,17 @@ drop policy if exists finishes_all on public.finishes;
 create policy finishes_all on public.finishes
   for all using (is_event_owner(event_id)) with check (is_event_owner(event_id));
 
--- results — public read, organizer write, plus athlete self-timed inserts
+-- results — public read; direct writes are organizer-only. Anonymous athletes
+-- never insert/update results directly (that would allow forged director_timed
+-- rows and arbitrary fields); they go through the submit_self_result RPC, which
+-- forces source = 'self_timed' and binds the row to their own athlete identity.
 drop policy if exists results_select on public.results;
 create policy results_select on public.results
   for select using (is_event_public(event_id) or is_event_owner(event_id));
 
 drop policy if exists results_insert on public.results;
 create policy results_insert on public.results
-  for insert with check (is_event_public(event_id) or is_event_owner(event_id));
+  for insert with check (is_event_owner(event_id));
 
 drop policy if exists results_update on public.results;
 create policy results_update on public.results
@@ -282,3 +405,12 @@ alter publication supabase_realtime add table public.events;
 alter publication supabase_realtime add table public.athletes;
 alter publication supabase_realtime add table public.finishes;
 alter publication supabase_realtime add table public.results;
+
+-- DELETE/UPDATE realtime payloads only carry the full OLD row when the table's
+-- replica identity is FULL. Without this, a deleted/corrected result emits only
+-- its primary key, so subscribers filtering on event_id never receive the event
+-- and scoreboards silently diverge after deletes. FULL fixes that.
+alter table public.events   replica identity full;
+alter table public.athletes replica identity full;
+alter table public.finishes replica identity full;
+alter table public.results  replica identity full;

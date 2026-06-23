@@ -205,6 +205,29 @@ export async function saveResult(data) {
   return result;
 }
 
+// Anonymous self-timed submit. RLS forbids anon clients from writing results
+// directly, so this goes through the SECURITY DEFINER submit_self_result RPC,
+// which forces source = 'self_timed', binds the row to the caller's own athlete
+// (via session token or claimed athlete id), and upserts so re-saves replace in
+// place without hitting the owner-only UPDATE policy.
+export async function saveSelfResult(
+  eventId,
+  { session_token, name, team, final_time_seconds, distance_meters, splits, athlete_id } = {}
+) {
+  return unwrap(
+    await supabase.rpc('submit_self_result', {
+      p_event_id: eventId,
+      p_session_token: session_token ?? null,
+      p_name: (name || '').trim() || 'Athlete',
+      p_team: (team || '').trim() || null,
+      p_final_time_seconds: final_time_seconds ?? null,
+      p_distance_meters: distance_meters ?? null,
+      p_splits: splits ?? [],
+      p_athlete_id: athlete_id ?? null,
+    })
+  );
+}
+
 export async function updateResult(id, patch) {
   return unwrap(await supabase.from('results').update(patch).eq('id', id).select().single());
 }

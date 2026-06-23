@@ -8,14 +8,15 @@ import AthleteTimer from './pages/AthleteTimer.jsx';
 import Scoreboard from './pages/Scoreboard.jsx';
 import Result from './pages/Result.jsx';
 import NotFound from './pages/NotFound.jsx';
+import { RequireOrganizer } from './components/AuthGate.jsx';
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/admin" element={<AdminDashboard />} />
-      <Route path="/admin/event/:slug" element={<EventManage />} />
-      <Route path="/admin/time/:slug" element={<TimingStation />} />
+      <Route path="/admin" element={<RequireOrganizer><AdminDashboard /></RequireOrganizer>} />
+      <Route path="/admin/event/:slug" element={<RequireOrganizer><EventManage /></RequireOrganizer>} />
+      <Route path="/admin/time/:slug" element={<RequireOrganizer><TimingStation /></RequireOrganizer>} />
       <Route path="/event/:slug" element={<EventJoin />} />
       <Route path="/timer/:slug" element={<AthleteTimer />} />
       <Route path="/scoreboard/:slug" element={<Scoreboard />} />

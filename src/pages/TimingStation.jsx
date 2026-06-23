@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Flag, MonitorPlay, Plus, RotateCcw, Trash2, RefreshCw } from 'lucide-react';
 import { Logo, LoadingState } from '../components/Brand.jsx';
@@ -60,6 +60,43 @@ export default function TimingStation() {
   // Optimistic finish taps awaiting (or failing) their backend insert.
   const [pending, setPending] = useState([]);
   const [assigning, setAssigning] = useState(null);
+
+  const pendingKey = event?.id ? `igryt.pending_finishes.${event.id}` : null;
+
+  // Restore any taps that hadn't been confirmed when the page last closed. They
+  // come back flagged as errors so they require an explicit retry rather than
+  // silently re-firing (which could duplicate a tap that did sync before reload).
+  useEffect(() => {
+    if (!pendingKey) return;
+    try {
+      const raw = localStorage.getItem(pendingKey);
+      if (raw) setPending(JSON.parse(raw).map((p) => ({ ...p, status: 'error' })));
+    } catch {
+      /* ignore malformed cache */
+    }
+  }, [pendingKey]);
+
+  // Mirror unconfirmed taps to localStorage so a reload/crash never drops them.
+  useEffect(() => {
+    if (!pendingKey) return;
+    try {
+      if (pending.length) localStorage.setItem(pendingKey, JSON.stringify(pending));
+      else localStorage.removeItem(pendingKey);
+    } catch {
+      /* storage may be full/unavailable */
+    }
+  }, [pending, pendingKey]);
+
+  // Warn before navigating away while taps are still unconfirmed.
+  useEffect(() => {
+    if (!pending.length) return undefined;
+    const handler = (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [pending.length]);
 
   const rosterRows = roster || [];
   const scoreboard = scoreboardData || [];
@@ -175,7 +212,11 @@ export default function TimingStation() {
   }
 
   async function resetRace() {
-    if (window.confirm('Reset the race clock? This clears the gun time but keeps results.')) {
+    const unsynced = pending.length;
+    const message = unsynced
+      ? `${unsynced} finish ${unsynced === 1 ? 'tap has' : 'taps have'} not synced yet and will be permanently lost on reset. Reset the clock anyway?`
+      : 'Reset the race clock? This clears the gun time but keeps results.';
+    if (window.confirm(message)) {
       await updateEvent(event.id, { status: 'open', started_at: null });
       setPending([]);
       await refetchEvent();

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Settings2, MonitorPlay, Timer, X } from 'lucide-react';
 import { Shell, StatusBadge, LoadingState, ErrorState } from '../components/Brand.jsx';
+import { SignOutButton } from '../components/AuthGate.jsx';
 import { useAsyncStore } from '../lib/hooks.js';
 import { getEvents, createEvent, slugify, subscribeAll } from '../lib/storage.js';
 import { formatEventDate } from '../lib/format.js';
@@ -76,9 +77,12 @@ export default function AdminDashboard() {
           <h1 className="gryt-heading text-4xl text-white">Organizer</h1>
           <p className="text-sm text-gryt-mute">{count} event{count === 1 ? '' : 's'}</p>
         </div>
-        <button onClick={() => setOpen(true)} className="gryt-btn-primary">
-          <Plus size={18} /> Create Event
-        </button>
+        <div className="flex items-center gap-2">
+          <SignOutButton />
+          <button onClick={() => setOpen(true)} className="gryt-btn-primary">
+            <Plus size={18} /> Create Event
+          </button>
+        </div>
       </div>
 
       {loading && !events && <LoadingState label="Loading events" />}
