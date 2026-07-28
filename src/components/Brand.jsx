@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { BackendStatusChip, BackendStatusBanner } from './BackendStatus.jsx';
 
 // GRYT wordmark — geometric blue shards + bold type.
 export function Logo({ className = '', to = '/', size = 'md' }) {
@@ -98,11 +99,17 @@ export function Shell({ children, header = true, max = 'max-w-2xl' }) {
           <header className="sticky top-0 z-20 border-b border-gryt-line/70 bg-gryt-black/85 backdrop-blur">
             <div className={`mx-auto flex items-center justify-between px-4 py-3 ${max}`}>
               <Logo />
-              <Tagline className="hidden text-[10px] sm:block" />
+              <div className="flex items-center gap-3">
+                <Tagline className="hidden text-[10px] sm:block" />
+                <BackendStatusChip />
+              </div>
             </div>
           </header>
         )}
-        <main className={`mx-auto px-4 pb-24 pt-6 ${max}`}>{children}</main>
+        <main className={`mx-auto px-4 pb-24 pt-6 ${max}`}>
+          <BackendStatusBanner className="mb-4" />
+          {children}
+        </main>
       </div>
     </div>
   );

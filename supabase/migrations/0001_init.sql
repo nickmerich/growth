@@ -124,6 +124,31 @@ begin
 end $$;
 
 -- ─────────────────────────────────────────────────────────────────────────
+-- Authorization helpers.
+--
+-- Defined before the RPCs and RLS policies that call them so the objects exist
+-- in dependency order when this file is applied top-to-bottom on a fresh project.
+-- ─────────────────────────────────────────────────────────────────────────
+
+-- helper: is the current user the owner of an event?
+create or replace function public.is_event_owner(p_event_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.events e
+     where e.id = p_event_id and e.owner_id = auth.uid()
+  );
+$$;
+
+-- helper: is an event publicly visible?
+create or replace function public.is_event_public(p_event_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.events e
+     where e.id = p_event_id and e.is_public = true
+  );
+$$;
+
+-- ─────────────────────────────────────────────────────────────────────────
 -- assign_finisher RPC
 --
 -- Atomically assigns a raw finish to an athlete and upserts that athlete's
@@ -238,6 +263,24 @@ begin
     raise exception 'event % is not public', p_event_id;
   end if;
 
+  -- Bound the anonymous-writable metrics. Without this an anon caller can post
+  -- absurd values (negative or astronomically large) that poison every ranking,
+  -- since results_select is public. 48h and 1000km are far beyond any real event.
+  if p_final_time_seconds is not null
+     and (p_final_time_seconds < 0 or p_final_time_seconds > 172800) then
+    raise exception 'final_time_seconds % out of range (0..172800)', p_final_time_seconds;
+  end if;
+  if p_distance_meters is not null
+     and (p_distance_meters < 0 or p_distance_meters > 1000000) then
+    raise exception 'distance_meters % out of range (0..1000000)', p_distance_meters;
+  end if;
+  if p_splits is not null and jsonb_typeof(p_splits) <> 'array' then
+    raise exception 'splits must be a JSON array';
+  end if;
+  if p_splits is not null and jsonb_array_length(p_splits) > 500 then
+    raise exception 'too many splits (max 500)';
+  end if;
+
   if p_athlete_id is not null then
     -- Claim a pre-registered (e.g. organizer walk-up) athlete by id.
     select * into v_athlete from public.athletes
@@ -306,24 +349,6 @@ alter table public.events   enable row level security;
 alter table public.athletes enable row level security;
 alter table public.finishes enable row level security;
 alter table public.results  enable row level security;
-
--- helper: is the current user the owner of an event?
-create or replace function public.is_event_owner(p_event_id uuid)
-returns boolean language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from public.events e
-     where e.id = p_event_id and e.owner_id = auth.uid()
-  );
-$$;
-
--- helper: is an event publicly visible?
-create or replace function public.is_event_public(p_event_id uuid)
-returns boolean language sql stable security definer set search_path = public as $$
-  select exists (
-    select 1 from public.events e
-     where e.id = p_event_id and e.is_public = true
-  );
-$$;
 
 -- events
 drop policy if exists events_select on public.events;
@@ -401,10 +426,21 @@ begin
   end if;
 end $$;
 
-alter publication supabase_realtime add table public.events;
-alter publication supabase_realtime add table public.athletes;
-alter publication supabase_realtime add table public.finishes;
-alter publication supabase_realtime add table public.results;
+-- `alter publication ... add table` errors if the table is already a member, so
+-- guard each add. Supabase projects often ship a pre-populated publication, and
+-- this migration must stay re-runnable.
+do $$
+declare t text;
+begin
+  foreach t in array array['events','athletes','finishes','results'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
 
 -- DELETE/UPDATE realtime payloads only carry the full OLD row when the table's
 -- replica identity is FULL. Without this, a deleted/corrected result emits only

@@ -2,19 +2,21 @@
 // iGRYT data service layer — the single boundary every page reads/writes through.
 //
 // DB-touching reads and writes are async and delegate to the active backend:
-//   * Supabase   when VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY are set
-//   * localStorage otherwise, so the app still builds and demos credential-free
+//   * localStorage — the DEFAULT. Runs fully offline, no network, no Supabase.
+//   * Supabase     — strictly opt-in, only when usable credentials are present
+//                    or VITE_STORAGE_BACKEND=supabase asks for it.
+// See src/lib/backend-config.js for the full selection matrix.
 //
 // Pure helpers (uid, slugify, makeEventCode, calculateRankings, …) stay
 // synchronous and are re-exported here so existing imports keep working.
 // ─────────────────────────────────────────────────────────────────────────
-import { isSupabaseConfigured } from './supabase.js';
+import { isSupabaseConfigured, backendMode, backendConfigError } from './supabase.js';
 import * as supabaseBackend from './backends/supabase.js';
 import * as localBackend from './backends/local.js';
 
 const backend = isSupabaseConfigured ? supabaseBackend : localBackend;
 
-export { isSupabaseConfigured };
+export { isSupabaseConfigured, backendMode, backendConfigError };
 
 // Pure, synchronous helpers (shared with backends and tests).
 export {

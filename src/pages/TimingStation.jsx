@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Flag, MonitorPlay, Plus, RotateCcw, Trash2, RefreshCw } from 'lucide-react';
 import { Logo, LoadingState } from '../components/Brand.jsx';
+import { BackendStatusChip, BackendStatusBanner } from '../components/BackendStatus.jsx';
 import { MasterClock } from '../components/RaceClock.jsx';
 import { useAsyncStore, useWakeLock } from '../lib/hooks.js';
 import { beep, buzzer, click, vibrate, primeAudio } from '../lib/sound.js';
@@ -142,7 +143,15 @@ export default function TimingStation() {
         setCountdown('GO');
         buzzer();
         // Await + refetch so every device re-anchors its clock from started_at.
-        startEventClock(event.id).then(refetchEvent).catch(() => {});
+        // A failure here means there is no gun time at all, so it must be loud:
+        // silently swallowing it leaves the operator tapping a dead screen.
+        startEventClock(event.id)
+          .then(refetchEvent)
+          .catch((err) =>
+            window.alert(
+              `Could not start the race clock: ${err?.message || 'unknown error'}. Nothing was saved — try START RACE again.`
+            )
+          );
         setTimeout(() => setCountdown(null), 700);
       }
     }, 1000);
@@ -200,6 +209,12 @@ export default function TimingStation() {
 
   async function removeFinish(q) {
     if (q._optimistic) {
+      // An optimistic row only lives in this tab. Deleting an unsynced tap is
+      // unrecoverable, so make it deliberate rather than one mis-tap away.
+      const confirmed = window.confirm(
+        `This finish tap (${formatClock(q.timestamp_ms)}) has not synced yet. Deleting it discards the tap permanently. Delete it?`
+      );
+      if (!confirmed) return;
       setPending((p) => p.filter((x) => x.id !== q.id));
       return;
     }
@@ -247,7 +262,10 @@ export default function TimingStation() {
           </Link>
           <Logo to={null} size="sm" />
         </div>
-        <div className="truncate px-2 text-center text-sm font-semibold text-gryt-mute">{event.name}</div>
+        <div className="flex min-w-0 items-center gap-2 px-2">
+          <span className="truncate text-sm font-semibold text-gryt-mute">{event.name}</span>
+          <BackendStatusChip />
+        </div>
         <div className="flex items-center gap-1">
           {isLive && (
             <button onClick={resetRace} className="gryt-btn-ghost p-2" title="Reset clock">
@@ -306,6 +324,7 @@ export default function TimingStation() {
                 <Plus size={14} /> Manual time
               </button>
             </div>
+            <BackendStatusBanner className="mb-2" />
             {showManual && (
               <ManualEntry
                 event={event}
@@ -329,9 +348,8 @@ export default function TimingStation() {
                 else if (assignedAthlete) subtitle = `✓ ${assignedAthlete.name}`;
                 else subtitle = 'Unassigned — tap to assign';
                 return (
-                  <button
+                  <div
                     key={q.id}
-                    onClick={() => selectable && setSelectedFinish(active ? null : q.id)}
                     className={`flex w-full items-center justify-between rounded-xl border p-3 text-left transition ${
                       isError
                         ? 'border-red-500/40 bg-red-500/5'
@@ -344,17 +362,23 @@ export default function TimingStation() {
                               : 'border-gryt-line bg-white/[0.03] hover:border-gryt-light/40'
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFinish(active ? null : q.id)}
+                      disabled={!selectable}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left disabled:cursor-default"
+                    >
                       <span className="gryt-heading text-xl text-gryt-light">#{num}</span>
                       <div>
                         <div className="font-mono text-sm text-white">{formatClock(q.timestamp_ms)}</div>
                         <div className={`text-[11px] ${isError ? 'text-red-300' : 'text-gryt-mute'}`}>{subtitle}</div>
                       </div>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-1">
                       {isError && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); retryFinish(q); }}
+                          type="button"
+                          onClick={() => retryFinish(q)}
                           className="gryt-btn-ghost p-1.5 text-amber-300"
                           title="Retry sync"
                         >
@@ -362,14 +386,15 @@ export default function TimingStation() {
                         </button>
                       )}
                       <button
-                        onClick={(e) => { e.stopPropagation(); removeFinish(q); }}
+                        type="button"
+                        onClick={() => removeFinish(q)}
                         className="gryt-btn-ghost p-1.5"
                         title="Delete"
                       >
                         <Trash2 size={14} />
                       </button>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -412,7 +437,13 @@ export default function TimingStation() {
                     ) : (
                       a.status !== 'dnf' && (
                         <button
-                          onClick={() => markDNF(event.id, a).then(() => Promise.all([refetchQueue(), refetchBoard()])).catch(() => {})}
+                          onClick={() =>
+                            markDNF(event.id, a)
+                              .then(() => Promise.all([refetchQueue(), refetchBoard()]))
+                              .catch((err) =>
+                                window.alert(`Could not mark ${a.name} as DNF: ${err?.message || 'unknown error'}.`)
+                              )
+                          }
                           className="gryt-btn-ghost p-2"
                           title="Mark DNF"
                         >

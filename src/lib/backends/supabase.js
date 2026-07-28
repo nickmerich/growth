@@ -1,17 +1,39 @@
 // ─────────────────────────────────────────────────────────────────────────
 // Supabase backend.
 //
-// Active when VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY are set. Every reader
-// throws on a Supabase error so race-day writes can never silently fail, and
-// realtime subscriptions drive refetch-on-change for scoreboards. The exported
-// surface matches src/lib/backends/local.js exactly.
+// Strictly opt-in (see src/lib/backend-config.js): active only when usable
+// VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY credentials are present, or when
+// VITE_STORAGE_BACKEND=supabase requests it. Otherwise the localStorage backend
+// runs instead and nothing in this module is ever called.
+//
+// Every reader throws on a Supabase error so race-day writes can never silently
+// fail, and reports the outcome to the status store so the UI can surface a
+// broken connection. Realtime subscriptions drive refetch-on-change for
+// scoreboards. The exported surface matches src/lib/backends/local.js exactly.
 // ─────────────────────────────────────────────────────────────────────────
 import { supabase } from '../supabase.js';
 import { makeEventCode, slugify } from '../pure.js';
+import { reportBackendOk, reportBackendError } from '../status.js';
 
+// Every read/write funnels its outcome into the status store so the UI can tell
+// the operator whether the backend is actually reachable. Errors still throw —
+// callers must never mistake a failed write for a successful one.
 function unwrap({ data, error }) {
-  if (error) throw error;
+  if (error) {
+    reportBackendError(error);
+    throw error;
+  }
+  reportBackendOk();
   return data;
+}
+
+// For the delete/void paths that only care about `error`.
+function assertOk(error) {
+  if (error) {
+    reportBackendError(error);
+    throw error;
+  }
+  reportBackendOk();
 }
 
 // ── Events ──────────────────────────────────────────────────────────────────
@@ -56,8 +78,14 @@ export async function createEvent(data) {
       .insert(attempt === 0 ? payload : { ...payload, slug: `${payload.slug}-${attempt + 1}` })
       .select()
       .single();
-    if (!error) return row;
-    if (error.code !== '23505') throw error;
+    if (!error) {
+      reportBackendOk();
+      return row;
+    }
+    if (error.code !== '23505') {
+      reportBackendError(error);
+      throw error;
+    }
   }
   throw new Error('Could not generate a unique slug for this event');
 }
@@ -69,7 +97,7 @@ export async function updateEvent(id, patch) {
 export async function deleteEvent(id) {
   // Children removed by ON DELETE CASCADE.
   const { error } = await supabase.from('events').delete().eq('id', id);
-  if (error) throw error;
+  assertOk(error);
 }
 
 // ── Athletes ──────────────────────────────────────────────────────────────
@@ -116,7 +144,7 @@ export async function updateAthlete(id, patch) {
 
 export async function deleteAthlete(id) {
   const { error } = await supabase.from('athletes').delete().eq('id', id);
-  if (error) throw error;
+  assertOk(error);
 }
 
 // ── Finishes ──────────────────────────────────────────────────────────────
@@ -142,7 +170,7 @@ export async function recordFinishTimestamp(eventId, timestampMs) {
 
 export async function deleteFinishTimestamp(id) {
   const { error } = await supabase.from('finishes').delete().eq('id', id);
-  if (error) throw error;
+  assertOk(error);
 }
 
 export async function assignFinisherToAthlete(finishId, athleteId) {
@@ -234,7 +262,7 @@ export async function updateResult(id, patch) {
 
 export async function deleteResult(id) {
   const { error } = await supabase.from('results').delete().eq('id', id);
-  if (error) throw error;
+  assertOk(error);
 }
 
 // ── Realtime ──────────────────────────────────────────────────────────────

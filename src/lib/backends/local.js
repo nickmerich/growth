@@ -255,6 +255,15 @@ export async function saveSelfResult(
   eventId,
   { session_token, name, team, final_time_seconds, distance_meters, splits, athlete_id } = {}
 ) {
+  // Same bounds the submit_self_result RPC enforces, so a self-timed submission
+  // that succeeds locally cannot fail only once Supabase is switched on.
+  if (final_time_seconds != null && (final_time_seconds < 0 || final_time_seconds > 172800)) {
+    throw new Error('final_time_seconds out of range (0..172800)');
+  }
+  if (distance_meters != null && (distance_meters < 0 || distance_meters > 1000000)) {
+    throw new Error('distance_meters out of range (0..1000000)');
+  }
+
   let athlete;
   if (athlete_id) {
     athlete = read(KEYS.athletes).find((a) => a.id === athlete_id && a.event_id === eventId);
