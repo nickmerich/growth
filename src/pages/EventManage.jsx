@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Copy, Check, Timer, MonitorPlay, Trash2, UserPlus, Flag, Pencil, CheckCircle2 } from 'lucide-react';
-import { Shell, StatusBadge, Tagline } from '../components/Brand.jsx';
+import { Shell, StatusBadge, Tagline, LoadingState, ErrorState } from '../components/Brand.jsx';
 import { QRCode } from '../components/QRCode.jsx';
-import { useStore, useCopy } from '../lib/hooks.js';
+import { useAsyncStore, useCopy } from '../lib/hooks.js';
 import {
   getEventBySlug,
   getEventRoster,
@@ -13,6 +13,7 @@ import {
   deleteResult,
   finishEvent,
   markDNF,
+  subscribeToEvent,
 } from '../lib/storage.js';
 import { formatEventDate, formatTime, formatPace, formatMetric, originUrl } from '../lib/format.js';
 
@@ -25,17 +26,37 @@ const ROSTER_STATUS = {
 
 export default function EventManage() {
   const { slug } = useParams();
-  const event = useStore(() => getEventBySlug(slug), [slug]);
-  const roster = useStore(() => (event ? getEventRoster(event.id) : []), [slug, event?.id]);
-  const scoreboard = useStore(() => (event ? getScoreboard(event.id) : []), [slug, event?.id]);
+  const { data: event, loading, error, refetch: refetchEvent } = useAsyncStore(
+    () => getEventBySlug(slug),
+    [slug],
+    { subscribe: undefined }
+  );
+  const sub = event ? { subscribe: (cb) => subscribeToEvent(event.id, cb) } : {};
+  const { data: roster, refetch: refetchRoster } = useAsyncStore(
+    () => (event ? getEventRoster(event.id) : Promise.resolve([])),
+    [event?.id],
+    sub
+  );
+  const { data: scoreboard, refetch: refetchBoard } = useAsyncStore(
+    () => (event ? getScoreboard(event.id) : Promise.resolve([])),
+    [event?.id],
+    sub
+  );
   const { copied, copy } = useCopy();
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const joinUrl = useMemo(() => originUrl(`/event/${slug}`), [slug]);
   const boardUrl = useMemo(() => originUrl(`/scoreboard/${slug}`), [slug]);
 
-  if (!event) {
+  if (loading && event === undefined) {
+    return <Shell><LoadingState label="Loading event" /></Shell>;
+  }
+  if (error) {
+    return <Shell><ErrorState error={error} onRetry={refetchEvent} label="Couldn't load event" /></Shell>;
+  }
+  if (event === null) {
     return (
       <Shell>
         <p className="mt-12 text-center text-gryt-mute">Event not found.</p>
@@ -46,22 +67,42 @@ export default function EventManage() {
     );
   }
 
-  function addWalkup(e) {
+  // Let the write land in the backend, then refetch authoritative rows rather
+  // than rebuilding local state.
+  async function run(fn) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn();
+      await Promise.all([refetchRoster(), refetchBoard()]);
+    } catch (err) {
+      window.alert(err?.message || 'Action failed. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addWalkup(e) {
     e.preventDefault();
     if (!name.trim()) return;
-    registerAthlete(event.id, { name, team });
+    await run(() => registerAthlete(event.id, { name, team }));
     setName('');
     setTeam('');
   }
 
-  function markFinished() {
+  async function markFinished() {
     if (window.confirm('Lock final rankings and issue PROOF OF GRYT cards for all finishers?')) {
-      finishEvent(event.id);
+      await run(async () => {
+        await finishEvent(event.id);
+        await refetchEvent();
+      });
     }
   }
 
+  const rows = roster || [];
+  const board = scoreboard || [];
   const rankByAthlete = Object.fromEntries(
-    scoreboard.filter((r) => r.athlete_id).map((r) => [r.athlete_id, r])
+    board.filter((r) => r.athlete_id).map((r) => [r.athlete_id, r])
   );
 
   return (
@@ -115,7 +156,7 @@ export default function EventManage() {
       {/* Roster */}
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="gryt-heading text-2xl text-white">Roster ({roster.length})</h2>
+          <h2 className="gryt-heading text-2xl text-white">Roster ({rows.length})</h2>
         </div>
         <form onSubmit={addWalkup} className="gryt-card mb-3 flex flex-wrap items-end gap-2 p-3">
           <div className="min-w-[140px] flex-1">
@@ -126,14 +167,14 @@ export default function EventManage() {
             <label className="gryt-label">Team</label>
             <input className="gryt-input" value={team} onChange={(e) => setTeam(e.target.value)} placeholder="Optional" />
           </div>
-          <button type="submit" className="gryt-btn-primary" disabled={!name.trim()}>
+          <button type="submit" className="gryt-btn-primary" disabled={!name.trim() || busy}>
             <UserPlus size={16} /> Add
           </button>
         </form>
 
         <div className="gryt-card divide-y divide-gryt-line/60">
-          {roster.length === 0 && <div className="p-4 text-sm text-gryt-mute">No athletes registered yet.</div>}
-          {roster.map((a) => {
+          {rows.length === 0 && <div className="p-4 text-sm text-gryt-mute">No athletes registered yet.</div>}
+          {rows.map((a) => {
             const res = rankByAthlete[a.id];
             return (
               <div key={a.id} className="flex items-center justify-between gap-2 p-3">
@@ -147,14 +188,15 @@ export default function EventManage() {
                 </div>
                 <div className="flex shrink-0 gap-1">
                   {a.status !== 'dnf' && (
-                    <button onClick={() => markDNF(event.id, a)} className="gryt-btn-ghost p-2 text-xs" title="Mark DNF">
+                    <button onClick={() => run(() => markDNF(event.id, a))} disabled={busy} className="gryt-btn-ghost p-2 text-xs" title="Mark DNF">
                       <Flag size={15} />
                     </button>
                   )}
                   <button
                     onClick={() => {
-                      if (window.confirm(`Remove ${a.name} from this event?`)) deleteAthlete(a.id);
+                      if (window.confirm(`Remove ${a.name} from this event?`)) run(() => deleteAthlete(a.id));
                     }}
+                    disabled={busy}
                     className="gryt-btn-ghost p-2 text-xs"
                     title="Remove"
                   >
@@ -169,10 +211,10 @@ export default function EventManage() {
 
       {/* Results */}
       <section className="mt-8">
-        <h2 className="gryt-heading mb-3 text-2xl text-white">Results ({scoreboard.length})</h2>
+        <h2 className="gryt-heading mb-3 text-2xl text-white">Results ({board.length})</h2>
         <div className="gryt-card divide-y divide-gryt-line/60">
-          {scoreboard.length === 0 && <div className="p-4 text-sm text-gryt-mute">No results yet.</div>}
-          {scoreboard.map((r) => (
+          {board.length === 0 && <div className="p-4 text-sm text-gryt-mute">No results yet.</div>}
+          {board.map((r) => (
             <div key={r.id} className="flex items-center justify-between gap-2 p-3">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="gryt-heading w-8 text-center text-xl text-gryt-light">
@@ -197,8 +239,9 @@ export default function EventManage() {
                 </Link>
                 <button
                   onClick={() => {
-                    if (window.confirm('Delete this result?')) deleteResult(r.id);
+                    if (window.confirm('Delete this result?')) run(() => deleteResult(r.id));
                   }}
+                  disabled={busy}
                   className="gryt-btn-ghost p-2"
                   title="Delete result"
                 >

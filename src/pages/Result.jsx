@@ -2,9 +2,9 @@ import { forwardRef, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import html2canvas from 'html2canvas';
 import { Download, Copy, Check, MonitorPlay, ArrowLeft } from 'lucide-react';
-import { Shell } from '../components/Brand.jsx';
-import { useStore, useCopy } from '../lib/hooks.js';
-import { getResultById, getEventById, getScoreboard } from '../lib/storage.js';
+import { Shell, LoadingState, ErrorState } from '../components/Brand.jsx';
+import { useAsyncStore, useCopy } from '../lib/hooks.js';
+import { getResultById, getEventById, getScoreboard, subscribeToEvent } from '../lib/storage.js';
 import { formatTime, formatPace, formatEventDate, formatMetric } from '../lib/format.js';
 
 const VARIANTS = [
@@ -15,19 +15,36 @@ const VARIANTS = [
 
 export default function Result() {
   const { id } = useParams();
-  const result = useStore(() => getResultById(id), [id]);
-  const event = useStore(() => (result ? getEventById(result.event_id) : null), [id, result?.event_id]);
-  const scoreboard = useStore(() => (result ? getScoreboard(result.event_id) : []), [id, result?.event_id]);
+  const { data: result, loading: resultLoading, error: resultError, refetch } = useAsyncStore(
+    () => getResultById(id),
+    [id]
+  );
+  const { data: event } = useAsyncStore(
+    () => (result ? getEventById(result.event_id) : Promise.resolve(null)),
+    [result?.event_id]
+  );
+  // Rank derives from the same getScoreboard/calculateRankings path as Scoreboard.
+  const { data: scoreboard } = useAsyncStore(
+    () => (result ? getScoreboard(result.event_id) : Promise.resolve([])),
+    [result?.event_id],
+    result ? { subscribe: (cb) => subscribeToEvent(result.event_id, cb) } : {}
+  );
   const { copied, copy } = useCopy();
   const cardRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
-
-  const ranked = useMemo(() => scoreboard.find((r) => r.id === id), [scoreboard, id]);
-  const rank = ranked?.rank ?? result?.rank ?? null;
-  const isPodium = event?.status === 'finished' && rank && rank <= 3;
   const [variant, setVariant] = useState('finisher');
 
-  if (!result || !event) {
+  const ranked = useMemo(() => (scoreboard || []).find((r) => r.id === id), [scoreboard, id]);
+  const rank = ranked?.rank ?? result?.rank ?? null;
+  const isPodium = event?.status === 'finished' && rank && rank <= 3;
+
+  if ((resultLoading && result === undefined) || (result && event === undefined)) {
+    return <Shell><LoadingState label="Loading result" /></Shell>;
+  }
+  if (resultError) {
+    return <Shell><ErrorState error={resultError} onRetry={refetch} label="Couldn't load result" /></Shell>;
+  }
+  if (result === null || event === null) {
     return (
       <Shell>
         <p className="mt-12 text-center text-gryt-mute">Result not found.</p>

@@ -1,23 +1,35 @@
 import { useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { MapPin, Calendar, Users, MonitorPlay, ArrowRight } from 'lucide-react';
-import { Shell, StatusBadge, Tagline } from '../components/Brand.jsx';
-import { useStore } from '../lib/hooks.js';
-import { getEventBySlug, getEventRoster, registerAthlete } from '../lib/storage.js';
+import { Shell, StatusBadge, Tagline, LoadingState, ErrorState } from '../components/Brand.jsx';
+import { useAsyncStore } from '../lib/hooks.js';
+import { getEventBySlug, getEventRoster, registerAthlete, subscribeToEvent } from '../lib/storage.js';
 import { formatEventDate } from '../lib/format.js';
 
 export default function EventJoin() {
   const { slug } = useParams();
   const navigate = useNavigate();
-  const event = useStore(() => getEventBySlug(slug), [slug]);
-  const roster = useStore(() => (event ? getEventRoster(event.id) : []), [slug, event?.id]);
+  const { data: event, loading, error, refetch } = useAsyncStore(() => getEventBySlug(slug), [slug]);
+  const { data: roster } = useAsyncStore(
+    () => (event ? getEventRoster(event.id) : Promise.resolve([])),
+    [event?.id],
+    event ? { subscribe: (cb) => subscribeToEvent(event.id, cb) } : {}
+  );
 
   const [step, setStep] = useState('preview'); // preview | register | done
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
   const [athlete, setAthlete] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [joinError, setJoinError] = useState(null);
 
-  if (!event) {
+  if (loading && event === undefined) {
+    return <Shell><LoadingState label="Loading event" /></Shell>;
+  }
+  if (error) {
+    return <Shell><ErrorState error={error} onRetry={refetch} label="Couldn't load event" /></Shell>;
+  }
+  if (event === null) {
     return (
       <Shell>
         <p className="mt-12 text-center text-gryt-mute">Event not found.</p>
@@ -27,12 +39,27 @@ export default function EventJoin() {
 
   const selfAllowed = event.timing_mode === 'Self-Timed' || event.timing_mode === 'Hybrid';
 
-  function join(e) {
+  async function join(e) {
     e.preventDefault();
-    if (!name.trim()) return;
-    const a = registerAthlete(event.id, { name, team });
-    setAthlete(a);
-    setStep('done');
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    setJoinError(null);
+    try {
+      // A stable per-device token prevents duplicate athletes on refresh/rejoin.
+      const tokenKey = `igryt.athlete_token.${event.id}`;
+      let token = localStorage.getItem(tokenKey);
+      if (!token) {
+        token = `tok_${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
+        localStorage.setItem(tokenKey, token);
+      }
+      const a = await registerAthlete(event.id, { name, team, session_token: token });
+      setAthlete(a);
+      setStep('done');
+    } catch (err) {
+      setJoinError(err);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -45,7 +72,7 @@ export default function EventJoin() {
             <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-sm text-gryt-mute">
               <span className="flex items-center gap-1.5"><Calendar size={15} /> {formatEventDate(event.date, event.start_time) || 'TBD'}</span>
               {event.location && <span className="flex items-center gap-1.5"><MapPin size={15} /> {event.location}</span>}
-              <span className="flex items-center gap-1.5"><Users size={15} /> {roster.length} registered</span>
+              <span className="flex items-center gap-1.5"><Users size={15} /> {roster?.length ?? 0} registered</span>
             </div>
             <p className="mt-3 inline-block rounded-full bg-white/5 px-3 py-1 text-xs uppercase tracking-widest text-gryt-light">
               {event.challenge_type} · {event.scoring_method}
@@ -83,10 +110,15 @@ export default function EventJoin() {
               <input className="gryt-input" value={team} onChange={(e) => setTeam(e.target.value)} placeholder="North Shore" />
             </div>
           </div>
-          <button type="submit" className="gryt-btn-primary mt-5 w-full py-4 text-lg" disabled={!name.trim()}>
-            I'M IN — LET'S GO
+          {joinError && (
+            <p className="mt-3 text-center text-sm text-red-400">
+              {joinError.message || 'Could not check you in. Try again.'}
+            </p>
+          )}
+          <button type="submit" className="gryt-btn-primary mt-5 w-full py-4 text-lg" disabled={!name.trim() || saving}>
+            {saving ? 'CHECKING IN…' : "I'M IN — LET'S GO"}
           </button>
-          <button type="button" onClick={() => setStep('preview')} className="gryt-btn-ghost mt-2 w-full">
+          <button type="button" onClick={() => setStep('preview')} className="gryt-btn-ghost mt-2 w-full" disabled={saving}>
             Back
           </button>
         </form>

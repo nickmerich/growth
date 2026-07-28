@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Settings2, MonitorPlay, Timer, X } from 'lucide-react';
-import { Shell, StatusBadge } from '../components/Brand.jsx';
-import { useStore } from '../lib/hooks.js';
-import { getEvents, createEvent, slugify } from '../lib/storage.js';
+import { Shell, StatusBadge, LoadingState, ErrorState } from '../components/Brand.jsx';
+import { SignOutButton } from '../components/AuthGate.jsx';
+import { useAsyncStore } from '../lib/hooks.js';
+import { getEvents, createEvent, slugify, subscribeAll } from '../lib/storage.js';
 import { formatEventDate } from '../lib/format.js';
 
 const CHALLENGE_TYPES = ['Run', 'Time Trial', 'AMRAP', 'EMOM', 'Strength Circuit', 'Custom'];
@@ -29,10 +30,14 @@ const EMPTY = {
 };
 
 export default function AdminDashboard() {
-  const events = useStore(() => getEvents());
+  const { data: events, loading, error, refetch } = useAsyncStore(() => getEvents(), [], {
+    subscribe: subscribeAll,
+  });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [slugEdited, setSlugEdited] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const navigate = useNavigate();
 
   function set(key, value) {
@@ -44,35 +49,52 @@ export default function AdminDashboard() {
     if (!slugEdited) set('slug', slugify(value));
   }
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault();
-    if (!form.name.trim()) return;
-    const created = createEvent({ ...form, status: 'open' });
-    setForm(EMPTY);
-    setSlugEdited(false);
-    setOpen(false);
-    navigate(`/admin/event/${created.slug}`);
+    if (!form.name.trim() || saving) return;
+    setSaving(true);
+    setSubmitError(null);
+    try {
+      // Only navigate once the row exists in the backend and a slug comes back.
+      const created = await createEvent({ ...form, status: 'open' });
+      setForm(EMPTY);
+      setSlugEdited(false);
+      setOpen(false);
+      navigate(`/admin/event/${created.slug}`);
+    } catch (err) {
+      setSubmitError(err);
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const count = events?.length ?? 0;
 
   return (
     <Shell max="max-w-3xl">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="gryt-heading text-4xl text-white">Organizer</h1>
-          <p className="text-sm text-gryt-mute">{events.length} event{events.length === 1 ? '' : 's'}</p>
+          <p className="text-sm text-gryt-mute">{count} event{count === 1 ? '' : 's'}</p>
         </div>
-        <button onClick={() => setOpen(true)} className="gryt-btn-primary">
-          <Plus size={18} /> Create Event
-        </button>
+        <div className="flex items-center gap-2">
+          <SignOutButton />
+          <button onClick={() => setOpen(true)} className="gryt-btn-primary">
+            <Plus size={18} /> Create Event
+          </button>
+        </div>
       </div>
 
+      {loading && !events && <LoadingState label="Loading events" />}
+      {error && <ErrorState error={error} onRetry={refetch} label="Couldn't load events" />}
+
       <div className="mt-6 space-y-3">
-        {events.length === 0 && (
+        {events && events.length === 0 && (
           <div className="gryt-card p-8 text-center text-gryt-mute">
             No events yet. Create your first one to get a QR code and scoreboard.
           </div>
         )}
-        {events.map((e) => (
+        {(events || []).map((e) => (
           <div key={e.id} className="gryt-card p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -204,12 +226,18 @@ export default function AdminDashboard() {
               </label>
             </div>
 
+            {submitError && (
+              <p className="mt-4 text-center text-sm text-red-400">
+                {submitError.message || 'Could not create event. Try again.'}
+              </p>
+            )}
+
             <div className="mt-6 flex gap-3">
-              <button type="button" onClick={() => setOpen(false)} className="gryt-btn-secondary flex-1">
+              <button type="button" onClick={() => setOpen(false)} className="gryt-btn-secondary flex-1" disabled={saving}>
                 Cancel
               </button>
-              <button type="submit" className="gryt-btn-primary flex-1" disabled={!form.name.trim()}>
-                Create
+              <button type="submit" className="gryt-btn-primary flex-1" disabled={!form.name.trim() || saving}>
+                {saving ? 'Creating…' : 'Create'}
               </button>
             </div>
           </form>

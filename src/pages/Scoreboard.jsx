@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Maximize2 } from 'lucide-react';
-import { Tagline } from '../components/Brand.jsx';
+import { Tagline, LoadingState } from '../components/Brand.jsx';
 import { MasterClock } from '../components/RaceClock.jsx';
-import { useStore, useWakeLock } from '../lib/hooks.js';
-import { getEventBySlug, getScoreboard } from '../lib/storage.js';
+import { useAsyncStore, useWakeLock } from '../lib/hooks.js';
+import { getEventBySlug, getScoreboard, subscribeToEvent } from '../lib/storage.js';
 import { formatTime, formatPace, formatMetric, scoringMetricLabel } from '../lib/format.js';
 
 const MEDAL = ['', 'text-yellow-300', 'text-slate-300', 'text-amber-600'];
@@ -12,9 +12,22 @@ const MEDAL_BG = ['', 'bg-yellow-300/10', 'bg-slate-300/10', 'bg-amber-600/10'];
 
 export default function Scoreboard() {
   const { slug } = useParams();
-  const event = useStore(() => getEventBySlug(slug), [slug]);
-  const results = useStore(() => (event ? getScoreboard(event.id) : []), [slug, event?.id]);
+  const { data: event, loading: eventLoading, error: eventError } = useAsyncStore(
+    () => getEventBySlug(slug),
+    [slug],
+    { subscribe: undefined }
+  );
+  // Refetch-on-change keeps ranking authoritative (calculateRankings over fresh
+  // rows) instead of mutating local state from realtime payloads.
+  const { data: scoreboard, error: boardError } = useAsyncStore(
+    () => (event ? getScoreboard(event.id) : Promise.resolve([])),
+    [event?.id],
+    event ? { subscribe: (cb) => subscribeToEvent(event.id, cb) } : {}
+  );
   useWakeLock(true);
+
+  // Keep last known rows visible across transient refetch errors.
+  const results = useMemo(() => scoreboard || [], [scoreboard]);
 
   const [sortKey, setSortKey] = useState('rank'); // rank | time | name
   const [teamFilter, setTeamFilter] = useState('all');
@@ -81,7 +94,14 @@ export default function Scoreboard() {
     else el.requestFullscreen?.();
   }
 
-  if (!event) {
+  if (eventLoading && event === undefined) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gryt-black">
+        <LoadingState label="Loading scoreboard" />
+      </div>
+    );
+  }
+  if (event === null || eventError) {
     return <div className="flex min-h-screen items-center justify-center text-gryt-mute">Event not found.</div>;
   }
 
@@ -99,7 +119,9 @@ export default function Scoreboard() {
         </div>
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-[0.4em] text-gryt-mute">
-            {event.status === 'live' ? 'Race Clock' : event.status === 'finished' ? 'Final' : 'Standby'}
+            {boardError ? (
+              <span className="text-amber-400">Reconnecting…</span>
+            ) : event.status === 'live' ? 'Race Clock' : event.status === 'finished' ? 'Final' : 'Standby'}
           </div>
           {event.status === 'live' ? (
             <MasterClock

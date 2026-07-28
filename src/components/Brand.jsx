@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { BackendStatusChip, BackendStatusBanner } from './BackendStatus.jsx';
 
 // GRYT wordmark — geometric blue shards + bold type.
 export function Logo({ className = '', to = '/', size = 'md' }) {
@@ -52,6 +53,42 @@ export function StatusBadge({ status }) {
   );
 }
 
+// Branded spinner used by every async loading state.
+export function Spinner({ className = '' }) {
+  return (
+    <span
+      className={`inline-block h-6 w-6 animate-spin rounded-full border-2 border-gryt-line border-t-gryt-light ${className}`}
+      role="status"
+      aria-label="loading"
+    />
+  );
+}
+
+// Centered loading panel for in-Shell pages.
+export function LoadingState({ label = 'Loading…' }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-20 text-gryt-mute">
+      <Spinner />
+      <span className="text-sm uppercase tracking-widest">{label}</span>
+    </div>
+  );
+}
+
+// Error card with a retry affordance. `onRetry` is optional.
+export function ErrorState({ error, onRetry, label = 'Something went wrong' }) {
+  return (
+    <div className="gryt-card mx-auto mt-8 max-w-md p-6 text-center">
+      <div className="gryt-heading text-xl text-white">{label}</div>
+      {error?.message && <p className="mt-2 text-sm text-gryt-mute">{error.message}</p>}
+      {onRetry && (
+        <button onClick={onRetry} className="gryt-btn-secondary mt-4">
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Shared page chrome for the standard (non-fullscreen) screens.
 export function Shell({ children, header = true, max = 'max-w-2xl' }) {
   return (
@@ -62,11 +99,17 @@ export function Shell({ children, header = true, max = 'max-w-2xl' }) {
           <header className="sticky top-0 z-20 border-b border-gryt-line/70 bg-gryt-black/85 backdrop-blur">
             <div className={`mx-auto flex items-center justify-between px-4 py-3 ${max}`}>
               <Logo />
-              <Tagline className="hidden text-[10px] sm:block" />
+              <div className="flex items-center gap-3">
+                <Tagline className="hidden text-[10px] sm:block" />
+                <BackendStatusChip />
+              </div>
             </div>
           </header>
         )}
-        <main className={`mx-auto px-4 pb-24 pt-6 ${max}`}>{children}</main>
+        <main className={`mx-auto px-4 pb-24 pt-6 ${max}`}>
+          <BackendStatusBanner className="mb-4" />
+          {children}
+        </main>
       </div>
     </div>
   );

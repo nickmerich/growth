@@ -57,7 +57,70 @@ cues on each tap.
 
 ### Data model
 
-`events`, `athletes`, `finish_queue`, `results` — see `src/lib/storage.js`.
+`events`, `athletes`, `finishes`, `results` — see `src/lib/storage.js` and
+`supabase/migrations/0001_init.sql`.
+
+## Supabase mode: auth & security model
+
+When `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` are set the app talks to
+Supabase and Row Level Security is enforced. The security contract:
+
+- **Organizers must sign in.** `/admin`, `/admin/event/:slug`, and
+  `/admin/time/:slug` are gated by `RequireOrganizer` (email + password via
+  Supabase Auth). Created events get `owner_id = auth.uid()`, and every RLS
+  policy keys organizer writes on owner identity. In localStorage mode there is
+  no auth and the gate is a no-op, so the credential-free demo is unchanged.
+- **`assign_finisher` is locked down.** It is `SECURITY DEFINER`, checks
+  `is_event_owner(...)` internally, and `EXECUTE` is revoked from `public`/`anon`
+  and granted only to `authenticated`. Anonymous clients cannot forge or
+  overwrite director-timed results.
+- **Anonymous result writes are RPC-only.** `results` INSERT/UPDATE policies are
+  owner-only. Self-timed athletes never write `results` directly; they call the
+  `submit_self_result` RPC, which forces `source = 'self_timed'`, binds the row
+  to their own athlete (by per-device session token, or by claiming a
+  pre-registered roster athlete id), and upserts so re-saves replace in place
+  without tripping the owner-only UPDATE policy.
+- **Anonymous athlete self-join is constrained** to creating a `registered`
+  athlete on a public event; `finished`/`dnf` status and all roster mutations
+  stay owner-only.
+- **Realtime deletes propagate.** Event-scoped tables use `REPLICA IDENTITY
+  FULL` so DELETE/UPDATE payloads carry the `event_id` subscribers filter on;
+  scoreboards stay consistent after deletions/corrections.
+
+### Residual risk (documented)
+
+- A self-timed athlete reports their own metrics, so self-timed times are
+  inherently self-asserted (as with any unattended stopwatch). Organizers can
+  delete/override any result. Director-timed results cannot be forged.
+- Knowing a public event id **and** a victim's per-device session token would
+  let a client write that athlete's self-timed result, but the token is a
+  client-only random secret never exposed by the API.
+
+### Manual Supabase validation
+
+Automated tests cover the localStorage backend and the shared semantics; the
+Supabase RLS/RPC/realtime paths need a live project. To validate manually:
+
+1. Create a Supabase project, enable **Email** auth (disable "Confirm email" for
+   the quickest loop), and run `supabase/migrations/0001_init.sql` then
+   (optionally) `supabase/seed.sql` in the SQL editor.
+2. Copy `.env.example` → `.env.local`, fill `VITE_SUPABASE_URL` /
+   `VITE_SUPABASE_ANON_KEY`, and `npm run dev`.
+3. Visit `/admin` → you should be required to sign in. Create an account, then
+   create an event and confirm it appears (owner-scoped).
+4. In a second (incognito) browser, open `/event/<slug>`, join, self-time, and
+   **Save** — the result appears on the scoreboard as `self`. Save again and
+   confirm it **updates in place** (no duplicate). This exercises
+   `submit_self_result` against the owner-only `results` UPDATE policy.
+5. From the anon session, confirm a direct `results` insert is rejected, e.g.
+   `supabase.from('results').insert({ event_id, source: 'director_timed' })`
+   returns an RLS error, and `supabase.rpc('assign_finisher', …)` is denied.
+6. As the organizer, open the Timing Station, run a race, assign finishers, and
+   confirm director-timed results write and the second browser's scoreboard
+   updates live — including after you **delete** a result (realtime DELETE).
+7. Timing Station: tap RECORD FINISHER offline (or block the network), confirm
+   taps show "Not synced", reload the page and confirm they are **restored** for
+   retry, and that **Reset** warns before discarding unsynced taps.
 
 ## Brand
 
